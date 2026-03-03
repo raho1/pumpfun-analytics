@@ -361,6 +361,13 @@ def apply_chart(fig, height=380):
 
 
 # ─── Dune API Client (cached results first, execute as fallback) ──
+def _coerce_numeric(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert columns that look numeric from string to float/int."""
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="ignore")
+    return df
+
+
 class DuneClient:
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -376,7 +383,7 @@ class DuneClient:
             if r.status_code == 200:
                 rows = r.json().get("result", {}).get("rows", [])
                 if rows:
-                    return pd.DataFrame(rows)
+                    return _coerce_numeric(pd.DataFrame(rows))
         except Exception:
             pass
 
@@ -411,7 +418,7 @@ class DuneClient:
                 d = r.json()
                 state = d.get("state")
                 if state == "QUERY_STATE_COMPLETED":
-                    return pd.DataFrame(d.get("result", {}).get("rows", []))
+                    return _coerce_numeric(pd.DataFrame(d.get("result", {}).get("rows", [])))
                 if state in ("QUERY_STATE_FAILED", "QUERY_STATE_CANCELLED"):
                     return pd.DataFrame()
                 time.sleep(2)
@@ -910,18 +917,119 @@ with tab3:
 with tab7:
     st.markdown('<div class="sec-head">Fee Optimization Lab <span class="accent-line"></span></div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="sec-desc">Modeling variable creator fee structures across the bonding curve lifecycle. '
-        'Project Ascend introduced sliding fees (0.95% → 0.05%), but the optimal curve shape — maximizing '
-        'creator incentives while sustaining protocol revenue — remains an open design problem.</div>',
+        '<div class="sec-desc">Model the revenue impact of different creator fee structures. '
+        'Use the simulator below to design a custom fee curve, compare against presets, and quantify '
+        'the trade-off between creator incentives and protocol revenue.</div>',
         unsafe_allow_html=True)
 
-    # Fee by Curve Stage
+    # Load all fee data
     fcs = load("fee_by_curve_stage")
+    vfm = load("variable_fee_model")
+    fcg = load("fee_curve_granular")
+    fvs = load("fee_vs_survival")
+    sp = sol["price"] or 1
+
     if not fcs.empty:
-        # Volume & Fees by Curve Stage
+        # ── SECTION 1: INTERACTIVE FEE SIMULATOR ──────────────────
+        st.markdown("""
+        <div class="insight" style="margin-bottom:16px;">
+            <div class="tag">SIMULATOR</div>
+            <h4>Custom Fee Curve Builder</h4>
+            <p>Set creator fee rates for each bonding curve stage. Revenue projections are calculated
+            against actual 7-day volume data. Protocol fee is fixed at 1%.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Preset selector
+        preset = st.selectbox("Load a preset", [
+            "Custom", "Flat 1% (Current)", "Growth-Optimized (2%→0.5%)",
+            "Retention-Optimized (0.5%→2%)", "Ascend-Style Sliding",
+        ], index=0, key="fee_preset")
+
+        preset_rates = {
+            "Flat 1% (Current)": [1.0] * 6,
+            "Growth-Optimized (2%→0.5%)": [2.0, 1.5, 1.0, 0.75, 0.5, 0.5],
+            "Retention-Optimized (0.5%→2%)": [0.5, 0.75, 1.0, 1.5, 2.0, 2.0],
+            "Ascend-Style Sliding": [0.95, 0.70, 0.40, 0.20, 0.10, 0.05],
+        }
+        defaults = preset_rates.get(preset, [0.95, 0.70, 0.40, 0.20, 0.10, 0.05])
+
+        # Stage sliders
+        stage_names = fcs["curve_stage"].tolist()
+        custom_rates = []
+        cols = st.columns(min(len(stage_names), 6))
+        for i, stage in enumerate(stage_names[:6]):
+            with cols[i % 6]:
+                rate = st.slider(
+                    stage, min_value=0.00, max_value=3.00,
+                    value=defaults[i] if i < len(defaults) else 0.50,
+                    step=0.05, format="%.2f%%", key=f"fee_slider_{i}",
+                )
+                custom_rates.append(rate)
+
+        # Calculate revenue projections
+        fcs_sim = fcs.head(len(custom_rates)).copy()
+        fcs_sim["custom_creator_rate"] = custom_rates
+        fcs_sim["custom_creator_fee"] = fcs_sim["volume_sol"] * fcs_sim["custom_creator_rate"] / 100
+        fcs_sim["protocol_fee"] = fcs_sim["volume_sol"] * 0.01  # fixed 1%
+        fcs_sim["custom_total"] = fcs_sim["custom_creator_fee"] + fcs_sim["protocol_fee"]
+        fcs_sim["current_total"] = fcs_sim["protocol_fees_sol"] + fcs_sim["creator_fees_sol"]
+        fcs_sim["delta"] = fcs_sim["custom_total"] - fcs_sim["current_total"]
+
+        total_custom = fcs_sim["custom_total"].sum()
+        total_current = fcs_sim["current_total"].sum()
+        total_delta = total_custom - total_current
+        delta_pct = (total_delta / total_current * 100) if total_current > 0 else 0
+        custom_creator_total = fcs_sim["custom_creator_fee"].sum()
+        current_creator_total = fcs_sim["creator_fees_sol"].sum()
+
+        # Revenue impact KPIs
+        st.markdown("---")
+        kc1, kc2, kc3, kc4 = st.columns(4)
+        with kc1:
+            st.metric("Your Model Revenue", f"{total_custom:,.0f} SOL",
+                      f"${total_custom * sp:,.0f} USD")
+        with kc2:
+            d_color = "normal" if total_delta >= 0 else "inverse"
+            st.metric("vs Current", f"{total_delta:+,.0f} SOL",
+                      f"{delta_pct:+.1f}%", delta_color=d_color)
+        with kc3:
+            st.metric("Creator Payout", f"{custom_creator_total:,.0f} SOL",
+                      f"${custom_creator_total * sp:,.0f} USD")
+        with kc4:
+            cr_delta = custom_creator_total - current_creator_total
+            cr_pct = (cr_delta / current_creator_total * 100) if current_creator_total > 0 else 0
+            st.metric("Creator vs Current", f"{cr_delta:+,.0f} SOL",
+                      f"{cr_pct:+.1f}%")
+
+        # Comparison chart: Your Model vs Current
+        st.markdown('<div class="chart-card"><h4>Revenue by Stage: Your Model vs Current</h4></div>', unsafe_allow_html=True)
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=fcs_sim["curve_stage"], y=fcs_sim["current_total"],
+            name="Current", marker_color="rgba(124,58,237,0.3)", opacity=0.7))
+        fig.add_trace(go.Bar(x=fcs_sim["curve_stage"], y=fcs_sim["custom_total"],
+            name="Your Model", marker_color=CYAN, opacity=0.85))
+        fig.update_layout(barmode="group")
+        fig.update_yaxes(title_text="Total Fees (SOL)")
+        st.plotly_chart(apply_chart(fig, 380), use_container_width=True, config={"displayModeBar": False})
+
+        # Fee curve shape visualization
         c1, c2 = st.columns(2)
         with c1:
-            st.markdown('<div class="chart-card"><h4>Volume Distribution by Curve Stage</h4></div>', unsafe_allow_html=True)
+            st.markdown('<div class="chart-card"><h4>Your Fee Curve Shape</h4></div>', unsafe_allow_html=True)
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=fcs_sim["curve_stage"], y=fcs_sim["custom_creator_rate"],
+                name="Your Model", line=dict(color=CYAN, width=3), mode="lines+markers",
+                marker=dict(size=10)))
+            if not fcs_sim["effective_creator_rate"].isna().all():
+                fig.add_trace(go.Scatter(x=fcs_sim["curve_stage"], y=fcs_sim["effective_creator_rate"],
+                    name="Current Actual", line=dict(color=PURPLE, width=2, dash="dash"),
+                    mode="lines+markers", marker=dict(size=6)))
+            fig.update_yaxes(ticksuffix="%", title_text="Creator Fee Rate")
+            st.plotly_chart(apply_chart(fig, 340), use_container_width=True, config={"displayModeBar": False})
+
+        with c2:
+            st.markdown('<div class="chart-card"><h4>Volume Distribution by Stage</h4></div>', unsafe_allow_html=True)
             stage_colors = [RED, ORANGE, YELLOW, CYAN, BLUE, GREEN]
             fig = go.Figure(go.Bar(
                 x=fcs["curve_stage"], y=fcs["pct_of_total_volume"],
@@ -931,112 +1039,38 @@ with tab7:
                 hovertemplate="%{x}<br><b>%{y:.1f}%</b> of volume<extra></extra>"))
             fig.update_yaxes(ticksuffix="%", title_text="% of Total Volume")
             fig.update_layout(showlegend=False)
-            st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(apply_chart(fig, 340), use_container_width=True, config={"displayModeBar": False})
 
-        with c2:
-            st.markdown('<div class="chart-card"><h4>Effective Creator Fee Rate by Stage</h4></div>', unsafe_allow_html=True)
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=fcs["curve_stage"], y=fcs["effective_creator_rate"],
-                marker=dict(color=stage_colors[:len(fcs)], line=dict(color="#06060b", width=1)),
-                text=[f"{v:.2f}%" for v in fcs["effective_creator_rate"]], textposition="outside",
-                textfont=dict(color="#6b6b88", size=11),
-                hovertemplate="%{x}<br>Effective rate: <b>%{y:.3f}%</b><extra></extra>"))
-            fig.update_yaxes(ticksuffix="%", title_text="Effective Fee Rate")
+        # ── SECTION 2: PRESET MODEL BENCHMARKS ────────────────────
+        if not vfm.empty:
+            st.markdown("---")
+            st.markdown('<div class="chart-card"><h4>Preset Model Revenue Benchmarks (7d)</h4></div>', unsafe_allow_html=True)
+            model_colors = [PURPLE, GREEN, ORANGE, CYAN]
+            fig = go.Figure(go.Bar(
+                x=vfm["model"], y=vfm["total_fee_sol"],
+                marker=dict(color=model_colors[:len(vfm)], line=dict(color="#06060b", width=1)),
+                text=[f"{v:,.0f} SOL" for v in vfm["total_fee_sol"]], textposition="outside",
+                textfont=dict(color="#6b6b88", size=12, family="JetBrains Mono"),
+                hovertemplate="%{x}<br><b>%{y:,.0f} SOL</b> (${customdata[0]:,.0f})<extra></extra>",
+                customdata=[[v * sp] for v in vfm["total_fee_sol"]]))
+            fig.update_yaxes(title_text="Total Fee Revenue (SOL)")
             fig.update_layout(showlegend=False)
-            st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(apply_chart(fig, 380), use_container_width=True, config={"displayModeBar": False})
 
-        # Stacked fees: creator vs protocol by stage
-        st.markdown('<div class="chart-card"><h4>Creator vs Protocol Fees by Curve Stage (SOL)</h4></div>', unsafe_allow_html=True)
-        fig = go.Figure()
-        fig.add_trace(go.Bar(x=fcs["curve_stage"], y=fcs["protocol_fees_sol"],
-            name="Protocol Fee (1%)", marker_color=PURPLE, opacity=0.85))
-        fig.add_trace(go.Bar(x=fcs["curve_stage"], y=fcs["creator_fees_sol"],
-            name="Creator Fee", marker_color=CYAN, opacity=0.85))
-        fig.update_layout(barmode="group")
-        fig.update_yaxes(title_text="SOL")
-        st.plotly_chart(apply_chart(fig, 340), use_container_width=True, config={"displayModeBar": False})
-
-        # Key insight from the data
-        early_pct = fcs.iloc[0]["pct_of_total_volume"] if len(fcs) > 0 else 0
-        late_stages = fcs[fcs["curve_stage"].str.contains("Late|Near-Grad|Post")]
-        late_pct = late_stages["pct_of_total_volume"].sum() if not late_stages.empty else 0
-        st.markdown(f"""
-        <div class="insight-grid">
-            <div class="insight">
-                <div class="tag">KEY FINDING</div>
-                <h4>Where Fees Are Generated</h4>
-                <p><strong>{early_pct:.1f}%</strong> of volume happens in the early stage (0-5 SOL reserves).
-                This means fee changes at the bottom of the curve have outsized revenue impact —
-                but also affect the most price-sensitive, speculative traders.</p>
-            </div>
-            <div class="insight">
-                <div class="tag">OPTIMIZATION SURFACE</div>
-                <h4>Pre vs Post Graduation</h4>
-                <p>Only <strong>{late_pct:.1f}%</strong> of volume reaches the late/graduation stages.
-                A growth-optimized fee would <strong>reduce early fees to boost survival</strong>
-                and increase late fees where traders have higher conviction.</p>
-            </div>
-            <div class="insight">
-                <div class="tag">DESIGN QUESTION</div>
-                <h4>The Trade-Off</h4>
-                <p>Lower early fees → more tokens survive → more graduations → more post-grad volume.
-                But does the <strong>increased token survival offset lost early revenue</strong>?
-                The variable fee model below tests this hypothesis.</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # Variable Fee Model Comparison
-    vfm = load("variable_fee_model")
-    if not vfm.empty:
-        st.markdown('<div class="chart-card"><h4>Variable Fee Model Comparison (7d Revenue)</h4></div>', unsafe_allow_html=True)
-        model_colors = [PURPLE, GREEN, ORANGE, CYAN]
-        fig = go.Figure(go.Bar(
-            x=vfm["model"], y=vfm["total_fee_sol"],
-            marker=dict(color=model_colors[:len(vfm)], line=dict(color="#06060b", width=1)),
-            text=[f"{v:,.0f} SOL" for v in vfm["total_fee_sol"]], textposition="outside",
-            textfont=dict(color="#6b6b88", size=12, family="JetBrains Mono"),
-            hovertemplate="%{x}<br><b>%{y:,.0f} SOL</b><extra></extra>"))
-        fig.update_yaxes(title_text="Total Fee Revenue (SOL)")
-        fig.update_layout(showlegend=False)
-        st.plotly_chart(apply_chart(fig, 400), use_container_width=True, config={"displayModeBar": False})
-
-        # Model explanations
-        sp = sol["price"] or 1
-        st.markdown(f"""
-        <div class="insight-grid">
-            <div class="insight">
-                <div class="tag">GROWTH-OPTIMIZED</div>
-                <h4>2% Early → 0.5% Late</h4>
-                <p>Front-loads fees when tokens are cheap and speculative. Captures maximum value
-                from the <strong>high-volume early stage</strong>, but may discourage initial traders.
-                Revenue: <strong>{vfm[vfm['model'].str.contains('Growth')]['total_fee_sol'].iloc[0]:,.0f} SOL</strong>
-                (${vfm[vfm['model'].str.contains('Growth')]['total_fee_sol'].iloc[0]*sp:,.0f}).</p>
-            </div>
-            <div class="insight">
-                <div class="tag">RETENTION-OPTIMIZED</div>
-                <h4>0.5% Early → 2% Late</h4>
-                <p>Subsidizes early trading to <strong>maximize token survival</strong> and graduation.
-                Higher fees later capture value from committed traders. Revenue:
-                <strong>{vfm[vfm['model'].str.contains('Retention')]['total_fee_sol'].iloc[0]:,.0f} SOL</strong>
-                (${vfm[vfm['model'].str.contains('Retention')]['total_fee_sol'].iloc[0]*sp:,.0f}).</p>
-            </div>
-            <div class="insight">
-                <div class="tag">ASCEND-STYLE</div>
-                <h4>Sliding by Market Cap</h4>
-                <p>Mirrors Project Ascend's actual design: <strong>0.95% under $300K → 0.05% above $20M</strong>.
-                Creator-aligned but with reduced protocol take at scale. Revenue:
-                <strong>{vfm[vfm['model'].str.contains('Ascend')]['total_fee_sol'].iloc[0]:,.0f} SOL</strong>
-                (${vfm[vfm['model'].str.contains('Ascend')]['total_fee_sol'].iloc[0]*sp:,.0f}).</p>
-            </div>
+        # ── SECTION 3: EVIDENCE BASE ──────────────────────────────
+        st.markdown("---")
+        st.markdown("""
+        <div class="insight" style="margin-bottom:16px;">
+            <div class="tag">EVIDENCE</div>
+            <h4>Fee Impact on Token Health</h4>
+            <p>Use this data to inform your fee curve decisions. Higher fees correlate with shorter
+            token lifespans, while moderate fees (0.5-2%) show the healthiest trading patterns.</p>
         </div>
         """, unsafe_allow_html=True)
 
     # Granular fee curve
-    fcg = load("fee_curve_granular")
     if not fcg.empty:
-        st.markdown('<div class="chart-card"><h4>Fee Landscape: Creator Fee % vs Reserve Level</h4></div>', unsafe_allow_html=True)
+        st.markdown('<div class="chart-card"><h4>Current Fee Landscape: Creator Fee % vs Reserve Level</h4></div>', unsafe_allow_html=True)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         fig.add_trace(go.Bar(
             x=fcg["reserve_bucket_sol"], y=fcg["volume_sol"], name="Volume (SOL)",
@@ -1053,7 +1087,6 @@ with tab7:
         st.plotly_chart(apply_chart(fig, 400), use_container_width=True, config={"displayModeBar": False})
 
     # Fee vs Survival
-    fvs = load("fee_vs_survival")
     if not fvs.empty:
         c1, c2 = st.columns(2)
         with c1:
@@ -1080,28 +1113,29 @@ with tab7:
             fig.update_layout(showlegend=False)
             st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
 
+        # Decision framework
         st.markdown("""
         <div class="insight-grid">
             <div class="insight">
-                <div class="tag">RECOMMENDATION</div>
-                <h4>Variable Fee Design</h4>
-                <p>The data suggests a <strong>concave fee curve</strong> — start moderate (not high) to avoid
-                killing early momentum, peak at mid-curve where conviction is building, then taper to retain
-                graduated tokens in the PumpSwap ecosystem.</p>
+                <div class="tag">FINDING</div>
+                <h4>Fee Sweet Spot: 0.5-2%</h4>
+                <p>Tokens with creator fees in the <strong>0.5-2% range</strong> show the healthiest trading
+                patterns — longer lifespans and higher average volume. Below 0.5%, creators have no incentive
+                to promote. Above 2%, trader friction kills momentum.</p>
             </div>
             <div class="insight">
-                <div class="tag">CREATOR ALIGNMENT</div>
-                <h4>Fee Sharing Matters</h4>
-                <p>Tokens with creator fees in the <strong>0.5-2% range</strong> show healthier trading patterns.
-                Too low = no creator incentive to promote. Too high = deters traders.
-                The sweet spot balances <strong>creator revenue with trader friction</strong>.</p>
+                <div class="tag">STRATEGY</div>
+                <h4>Concave Curve Wins</h4>
+                <p>Start moderate (not high) to avoid killing early momentum, peak at mid-curve where
+                conviction is building, then taper post-graduation. This shape <strong>maximizes both
+                creator engagement and protocol revenue</strong>.</p>
             </div>
             <div class="insight">
-                <div class="tag">NEXT STEPS</div>
-                <h4>A/B Testing Framework</h4>
-                <p>Deploy 2-3 fee curves simultaneously on new token launches, measure graduation rate,
-                30-day volume retention, and creator engagement. Use <strong>causal inference</strong>
-                (not just correlation) to identify the optimal fee function.</p>
+                <div class="tag">VALIDATION</div>
+                <h4>A/B Test Recommended</h4>
+                <p>Deploy 2-3 fee curves on new launches simultaneously. Measure graduation rate, 30-day
+                volume retention, and creator revenue. Use the simulator above to define your test
+                variants before deployment.</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -1280,7 +1314,7 @@ st.markdown(f"""
     <p>Built by <strong>Ryan Holloway</strong> · Powered by
     <a href="https://dune.com" target="_blank">Dune Analytics</a> ·
     CoinGecko · DeFiLlama</p>
-    <p class="sub">{datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')} ·
+    <p class="sub">{datetime.now(tz=None).strftime('%Y-%m-%d %H:%M UTC')} ·
     {len(QUERY_IDS)} DuneSQL queries · Decoded events · Real-time</p>
     <div class="tech-stack">
         <span class="tech-pill">Streamlit</span>
