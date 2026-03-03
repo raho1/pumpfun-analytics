@@ -18,9 +18,9 @@ export interface DailyLaunches {
 
 export interface GraduationRate {
   day: string;
-  created: number;
-  graduated: number;
-  grad_rate: number;
+  launches: number;
+  graduations: number;
+  grad_rate: number | string;
 }
 
 export interface FeeRevenue {

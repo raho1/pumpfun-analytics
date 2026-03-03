@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useDuneQuery } from "@/hooks/use-dune-query";
 import { ChartCard } from "@/components/chart-card";
 import { SectionHeader } from "@/components/section-header";
@@ -14,8 +15,13 @@ import type { DailyLaunches, DailyVolume, GraduationRate, NewVsReturning } from 
 export function OverviewTab() {
   const { data: launches, isLoading: loadingLaunches } = useDuneQuery<DailyLaunches[]>("daily_launches");
   const { data: volume, isLoading: loadingVolume } = useDuneQuery<DailyVolume[]>("daily_volume");
-  const { data: gradRate, isLoading: loadingGrad } = useDuneQuery<GraduationRate[]>("graduation_rate");
+  const { data: gradRateRaw, isLoading: loadingGrad } = useDuneQuery<GraduationRate[]>("graduation_rate");
   const { data: newRet, isLoading: loadingNR } = useDuneQuery<NewVsReturning[]>("new_vs_returning");
+
+  const gradRate = useMemo(() => {
+    if (!gradRateRaw) return undefined;
+    return gradRateRaw.map((r) => ({ ...r, grad_rate: Number(r.grad_rate) }));
+  }, [gradRateRaw]);
 
   return (
     <div>

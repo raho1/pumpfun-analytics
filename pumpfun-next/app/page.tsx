@@ -51,7 +51,7 @@ export default function Home() {
       : "~170K";
 
     const avgGrad = gradRate && gradRate.length > 0
-      ? formatPercent(gradRate.reduce((s, r) => s + r.grad_rate, 0) / gradRate.length)
+      ? formatPercent(gradRate.reduce((s, r) => s + Number(r.grad_rate), 0) / gradRate.length)
       : "~1%";
 
     const avgFees = feeRevenue && feeRevenue.length > 0
