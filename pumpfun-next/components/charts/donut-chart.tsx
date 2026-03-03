@@ -54,6 +54,8 @@ export function DonutChartComponent({
             fontSize: 12,
             color: "#e8e8f0",
           }}
+          labelStyle={{ color: "#8888a0" }}
+          itemStyle={{ color: "#e8e8f0" }}
           formatter={(value: unknown) => [
             valueFormatter ? valueFormatter(Number(value)) : `${Number(value).toFixed(1)}%`,
           ]}

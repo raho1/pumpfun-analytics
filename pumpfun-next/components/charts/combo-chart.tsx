@@ -75,6 +75,8 @@ export function ComboChartComponent({
             fontSize: 12,
             color: "#e8e8f0",
           }}
+          labelStyle={{ color: "#8888a0" }}
+          itemStyle={{ color: "#e8e8f0" }}
           labelFormatter={isDate ? dateLabelFormatter : undefined}
         />
         <Legend wrapperStyle={{ fontSize: 10, color: "#6b6b88" }} />

@@ -64,6 +64,8 @@ export function AreaChartComponent({
             fontSize: 12,
             color: "#e8e8f0",
           }}
+          labelStyle={{ color: "#8888a0" }}
+          itemStyle={{ color: "#e8e8f0" }}
           labelFormatter={isDate ? dateLabelFormatter : undefined}
           formatter={(value: unknown) => [yFormatter ? yFormatter(Number(value)) : Number(value).toLocaleString(), yKey]}
         />
