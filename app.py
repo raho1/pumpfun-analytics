@@ -357,33 +357,46 @@ def apply_chart(fig, height=380):
     return fig
 
 
-# ─── Dune API Client ──────────────────────────────────────────
+# ─── Dune API Client (execute saved queries by ID) ───────────
 class DuneClient:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.headers = {"X-Dune-API-Key": api_key}
 
-    def execute_sql(self, sql: str) -> pd.DataFrame:
-        url = f"{DUNE_BASE}/query/execute/sql"
-        resp = requests.post(url, headers=self.headers, json={"query_sql": sql})
-        resp.raise_for_status()
-        eid = resp.json().get("execution_id")
-        if not eid:
+    def execute_query(self, query_id: int, params: dict = None) -> pd.DataFrame:
+        url = f"{DUNE_BASE}/query/{query_id}/execute"
+        body = {}
+        if params:
+            body["query_parameters"] = [
+                {"key": k, "value": str(v), "type": "number"} for k, v in params.items()
+            ]
+        try:
+            resp = requests.post(url, headers=self.headers, json=body, timeout=30)
+            if resp.status_code != 200:
+                return pd.DataFrame()
+            eid = resp.json().get("execution_id")
+            if not eid:
+                return pd.DataFrame()
+            return self._poll(eid)
+        except Exception:
             return pd.DataFrame()
-        return self._poll(eid)
 
     def _poll(self, eid: str, timeout: int = 300) -> pd.DataFrame:
         url = f"{DUNE_BASE}/execution/{eid}/results"
         t0 = time.time()
-        while time.time() - t0 < timeout:
-            r = requests.get(url, headers=self.headers)
-            r.raise_for_status()
-            d = r.json()
-            if d.get("state") == "QUERY_STATE_COMPLETED":
-                return pd.DataFrame(d.get("result", {}).get("rows", []))
-            if d.get("state") in ("QUERY_STATE_FAILED", "QUERY_STATE_CANCELLED"):
-                return pd.DataFrame()
-            time.sleep(3)
+        try:
+            while time.time() - t0 < timeout:
+                r = requests.get(url, headers=self.headers, timeout=30)
+                if r.status_code != 200:
+                    return pd.DataFrame()
+                d = r.json()
+                if d.get("state") == "QUERY_STATE_COMPLETED":
+                    return pd.DataFrame(d.get("result", {}).get("rows", []))
+                if d.get("state") in ("QUERY_STATE_FAILED", "QUERY_STATE_CANCELLED"):
+                    return pd.DataFrame()
+                time.sleep(3)
+        except Exception:
+            return pd.DataFrame()
         return pd.DataFrame()
 
 
@@ -434,337 +447,44 @@ def get_defillama_volume():
     return {}
 
 
-# ─── Query Definitions ────────────────────────────────────────
-QUERIES = {
-    "daily_launches": """
-        SELECT DATE_TRUNC('day', evt_block_time) AS day, COUNT(*) AS launches
-        FROM pumpdotfun_solana.pump_evt_createevent
-        WHERE evt_block_date >= CURRENT_DATE - INTERVAL '{days}' DAY
-        GROUP BY 1 ORDER BY 1
-    """,
-    "daily_volume": """
-        SELECT
-            DATE_TRUNC('day', evt_block_time) AS day,
-            SUM(sol_amount / 1e9) AS volume_sol,
-            SUM(CASE WHEN is_buy THEN sol_amount / 1e9 ELSE 0 END) AS buy_vol,
-            SUM(CASE WHEN NOT is_buy THEN sol_amount / 1e9 ELSE 0 END) AS sell_vol,
-            COUNT(*) AS trades,
-            COUNT(DISTINCT "user") AS unique_traders
-        FROM pumpdotfun_solana.pump_evt_tradeevent
-        WHERE evt_block_date >= CURRENT_DATE - INTERVAL '{days}' DAY
-        GROUP BY 1 ORDER BY 1
-    """,
-    "graduation_rate": """
-        WITH c AS (
-            SELECT DATE_TRUNC('day', evt_block_time) AS day, COUNT(*) AS n
-            FROM pumpdotfun_solana.pump_evt_createevent
-            WHERE evt_block_date >= CURRENT_DATE - INTERVAL '{days}' DAY GROUP BY 1
-        ), g AS (
-            SELECT DATE_TRUNC('day', evt_block_time) AS day, COUNT(*) AS n
-            FROM pumpdotfun_solana.pump_evt_completeevent
-            WHERE evt_block_date >= CURRENT_DATE - INTERVAL '{days}' DAY GROUP BY 1
-        )
-        SELECT c.day, c.n AS launches, COALESCE(g.n,0) AS graduations,
-               ROUND(COALESCE(g.n,0)*100.0/NULLIF(c.n,0),2) AS grad_rate
-        FROM c LEFT JOIN g ON c.day=g.day ORDER BY 1
-    """,
-    "fee_revenue": """
-        SELECT DATE_TRUNC('day', evt_block_time) AS day,
-            SUM(sol_amount*0.01/1e9) AS protocol_fees,
-            SUM(creator_fee_sol_amount/1e9) AS creator_fees,
-            SUM((sol_amount*0.01+creator_fee_sol_amount)/1e9) AS total_fees
-        FROM pumpdotfun_solana.pump_evt_tradeevent
-        WHERE evt_block_date >= CURRENT_DATE - INTERVAL '{days}' DAY
-        GROUP BY 1 ORDER BY 1
-    """,
-    "trade_size_dist": """
-        WITH s AS (
-            SELECT CASE
-                WHEN sol_amount/1e9<0.1 THEN '< 0.1 SOL'
-                WHEN sol_amount/1e9<0.5 THEN '0.1-0.5'
-                WHEN sol_amount/1e9<1 THEN '0.5-1'
-                WHEN sol_amount/1e9<5 THEN '1-5'
-                WHEN sol_amount/1e9<10 THEN '5-10'
-                WHEN sol_amount/1e9<50 THEN '10-50'
-                ELSE '50+'
-            END AS bucket, sol_amount/1e9 AS amt
-            FROM pumpdotfun_solana.pump_evt_tradeevent
-            WHERE evt_block_date >= CURRENT_DATE - INTERVAL '7' DAY
-        )
-        SELECT bucket, COUNT(*) AS cnt,
-            ROUND(SUM(amt),2) AS vol,
-            ROUND(COUNT(*)*100.0/SUM(COUNT(*)) OVER(),2) AS pct_trades,
-            ROUND(SUM(amt)*100.0/SUM(SUM(amt)) OVER(),2) AS pct_vol
-        FROM s GROUP BY 1
-        ORDER BY CASE bucket WHEN '< 0.1 SOL' THEN 1 WHEN '0.1-0.5' THEN 2
-            WHEN '0.5-1' THEN 3 WHEN '1-5' THEN 4 WHEN '5-10' THEN 5
-            WHEN '10-50' THEN 6 ELSE 7 END
-    """,
-    "token_survival": """
-        WITH tl AS (
-            SELECT c.mint,
-                DATE_DIFF('minute', MIN(c.evt_block_time), MAX(t.evt_block_time)) AS life_min
-            FROM pumpdotfun_solana.pump_evt_createevent c
-            LEFT JOIN pumpdotfun_solana.pump_evt_tradeevent t
-                ON c.mint=t.mint AND t.evt_block_date >= CURRENT_DATE - INTERVAL '14' DAY
-            WHERE c.evt_block_date >= CURRENT_DATE - INTERVAL '14' DAY
-            GROUP BY 1
-        )
-        SELECT CASE
-            WHEN life_min IS NULL OR life_min<5 THEN '< 5 min'
-            WHEN life_min<30 THEN '5-30 min' WHEN life_min<60 THEN '30-60 min'
-            WHEN life_min<360 THEN '1-6 hr' WHEN life_min<1440 THEN '6-24 hr'
-            WHEN life_min<4320 THEN '1-3 days' ELSE '3+ days'
-        END AS bucket, COUNT(*) AS tokens,
-            ROUND(COUNT(*)*100.0/SUM(COUNT(*)) OVER(),2) AS pct
-        FROM tl GROUP BY 1
-        ORDER BY CASE bucket WHEN '< 5 min' THEN 1 WHEN '5-30 min' THEN 2
-            WHEN '30-60 min' THEN 3 WHEN '1-6 hr' THEN 4 WHEN '6-24 hr' THEN 5
-            WHEN '1-3 days' THEN 6 ELSE 7 END
-    """,
-    "bonding_curve": """
-        WITH mr AS (
-            SELECT mint, MAX(real_sol_reserves/1e9) AS max_r
-            FROM pumpdotfun_solana.pump_evt_tradeevent
-            WHERE evt_block_date >= CURRENT_DATE - INTERVAL '14' DAY GROUP BY 1
-        )
-        SELECT CASE
-            WHEN max_r<1 THEN '< 1 SOL' WHEN max_r<5 THEN '1-5'
-            WHEN max_r<15 THEN '5-15' WHEN max_r<30 THEN '15-30'
-            WHEN max_r<50 THEN '30-50' WHEN max_r<79 THEN '50-79'
-            ELSE '79+ (grad)'
-        END AS bucket, COUNT(*) AS tokens,
-            ROUND(COUNT(*)*100.0/SUM(COUNT(*)) OVER(),2) AS pct
-        FROM mr GROUP BY 1
-        ORDER BY CASE bucket WHEN '< 1 SOL' THEN 1 WHEN '1-5' THEN 2
-            WHEN '5-15' THEN 3 WHEN '15-30' THEN 4 WHEN '30-50' THEN 5
-            WHEN '50-79' THEN 6 ELSE 7 END
-    """,
-    "top_traders_pnl": """
-        WITH tp AS (
-            SELECT "user" AS trader,
-                SUM(CASE WHEN NOT is_buy THEN sol_amount/1e9 ELSE 0 END) AS recv,
-                SUM(CASE WHEN is_buy THEN sol_amount/1e9 ELSE 0 END) AS spent,
-                COUNT(DISTINCT mint) AS tokens, COUNT(*) AS trades
-            FROM pumpdotfun_solana.pump_evt_tradeevent
-            WHERE evt_block_date >= CURRENT_DATE - INTERVAL '7' DAY
-            GROUP BY 1 HAVING SUM(CASE WHEN is_buy THEN sol_amount/1e9 ELSE 0 END) > 10
-        )
-        SELECT trader, ROUND(recv-spent,2) AS pnl,
-            ROUND((recv-spent)*100.0/NULLIF(spent,0),1) AS roi,
-            ROUND(spent,2) AS spent, ROUND(recv,2) AS received, tokens, trades
-        FROM tp ORDER BY pnl DESC LIMIT 20
-    """,
-    "whale_tracker": """
-        SELECT "user" AS trader,
-            ROUND(SUM(sol_amount/1e9),2) AS volume,
-            ROUND(SUM(CASE WHEN NOT is_buy THEN sol_amount/1e9 ELSE 0 END)
-                - SUM(CASE WHEN is_buy THEN sol_amount/1e9 ELSE 0 END),2) AS pnl,
-            COUNT(DISTINCT mint) AS tokens, COUNT(*) AS trades,
-            ROUND(SUM(CASE WHEN is_buy THEN 1 ELSE 0 END)*100.0/COUNT(*),1) AS buy_pct
-        FROM pumpdotfun_solana.pump_evt_tradeevent
-        WHERE evt_block_date >= CURRENT_DATE - INTERVAL '7' DAY
-        GROUP BY 1 ORDER BY volume DESC LIMIT 20
-    """,
-    "sandwich_detection": """
-        WITH pt AS (
-            SELECT block_slot, block_time, trader_id, project_main_id,
-                token_bought_mint_address, token_sold_mint_address,
-                amount_usd, tx_id, tx_index, outer_instruction_index
-            FROM dex_solana.trades
-            WHERE project='pump_fun' AND block_date >= CURRENT_DATE - INTERVAL '7' DAY
-        ),
-        sc AS (
-            SELECT f.block_time, f.block_slot, f.trader_id AS bot,
-                f.amount_usd AS f_usd, b.amount_usd AS b_usd
-            FROM pt f JOIN pt b
-                ON f.block_slot=b.block_slot AND f.trader_id=b.trader_id
-                AND f.tx_id!=b.tx_id AND f.project_main_id=b.project_main_id
-                AND f.token_sold_mint_address=b.token_bought_mint_address
-                AND f.token_bought_mint_address=b.token_sold_mint_address
-                AND (f.tx_index<b.tx_index OR (f.tx_index=b.tx_index
-                    AND f.outer_instruction_index<b.outer_instruction_index))
-        )
-        SELECT DATE_TRUNC('day', block_time) AS day,
-            COUNT(*) AS attacks, COUNT(DISTINCT bot) AS bots,
-            ROUND(SUM(f_usd+b_usd),2) AS vol_usd
-        FROM sc GROUP BY 1 ORDER BY 1
-    """,
-    "bot_activity": """
-        SELECT DATE_TRUNC('day', block_time) AS day, name AS bot,
-            COUNT(*) AS trades, ROUND(SUM(amount_usd),2) AS vol_usd
-        FROM dex_solana.bot_trades
-        WHERE project='pump_fun' AND block_date >= CURRENT_DATE - INTERVAL '{days}' DAY
-        GROUP BY 1, 2 ORDER BY 1, vol_usd DESC
-    """,
-    "hourly_pattern": """
-        SELECT HOUR(evt_block_time) AS hr, COUNT(*) AS trades,
-            SUM(sol_amount/1e9) AS vol, COUNT(DISTINCT "user") AS traders
-        FROM pumpdotfun_solana.pump_evt_tradeevent
-        WHERE evt_block_date >= CURRENT_DATE - INTERVAL '7' DAY
-        GROUP BY 1 ORDER BY 1
-    """,
-    "price_impact": """
-        SELECT DATE_TRUNC('day', evt_block_time) AS day,
-            APPROX_PERCENTILE(ABS(sol_amount*1.0/NULLIF(virtual_sol_reserves,0))*100, 0.5) AS med,
-            APPROX_PERCENTILE(ABS(sol_amount*1.0/NULLIF(virtual_sol_reserves,0))*100, 0.95) AS p95,
-            APPROX_PERCENTILE(ABS(sol_amount*1.0/NULLIF(virtual_sol_reserves,0))*100, 0.99) AS p99
-        FROM pumpdotfun_solana.pump_evt_tradeevent
-        WHERE evt_block_date >= CURRENT_DATE - INTERVAL '{days}' DAY AND virtual_sol_reserves>0
-        GROUP BY 1 ORDER BY 1
-    """,
-    "creator_leaderboard": """
-        SELECT c.name, c.symbol,
-            ROUND(SUM(t.creator_fee_sol_amount/1e9),2) AS fees_sol,
-            ROUND(SUM(t.sol_amount/1e9),2) AS vol_sol, COUNT(*) AS trades
-        FROM pumpdotfun_solana.pump_evt_tradeevent t
-        JOIN pumpdotfun_solana.pump_evt_createevent c ON t.mint=c.mint
-            AND c.evt_block_date >= CURRENT_DATE - INTERVAL '7' DAY
-        WHERE t.evt_block_date >= CURRENT_DATE - INTERVAL '7' DAY
-        GROUP BY 1, 2 ORDER BY fees_sol DESC LIMIT 20
-    """,
-    "new_vs_returning": """
-        WITH fs AS (
-            SELECT "user", MIN(DATE_TRUNC('day', evt_block_time)) AS first_day
-            FROM pumpdotfun_solana.pump_evt_tradeevent
-            WHERE evt_block_date >= CURRENT_DATE - INTERVAL '60' DAY GROUP BY 1
-        ),
-        dt AS (
-            SELECT DATE_TRUNC('day', t.evt_block_time) AS day, t."user", f.first_day
-            FROM pumpdotfun_solana.pump_evt_tradeevent t
-            JOIN fs f ON t."user"=f."user"
-            WHERE t.evt_block_date >= CURRENT_DATE - INTERVAL '{days}' DAY
-        )
-        SELECT day,
-            COUNT(DISTINCT CASE WHEN day=first_day THEN "user" END) AS new_traders,
-            COUNT(DISTINCT CASE WHEN day!=first_day THEN "user" END) AS returning_traders
-        FROM dt GROUP BY 1 ORDER BY 1
-    """,
-    "fee_by_curve_stage": """
-        WITH trades AS (
-            SELECT
-                real_sol_reserves / 1e9 AS reserves_sol,
-                sol_amount / 1e9 AS trade_sol,
-                creator_fee_sol_amount / 1e9 AS creator_fee,
-                sol_amount * 0.01 / 1e9 AS protocol_fee,
-                is_buy,
-                CASE
-                    WHEN real_sol_reserves / 1e9 < 5 THEN 'Early (0-5 SOL)'
-                    WHEN real_sol_reserves / 1e9 < 15 THEN 'Growth (5-15)'
-                    WHEN real_sol_reserves / 1e9 < 30 THEN 'Mid (15-30)'
-                    WHEN real_sol_reserves / 1e9 < 50 THEN 'Late (30-50)'
-                    WHEN real_sol_reserves / 1e9 < 79 THEN 'Near-Grad (50-79)'
-                    ELSE 'Post-Grad (79+)'
-                END AS curve_stage
-            FROM pumpdotfun_solana.pump_evt_tradeevent
-            WHERE evt_block_date >= CURRENT_DATE - INTERVAL '7' DAY
-        )
-        SELECT curve_stage,
-            COUNT(*) AS trades,
-            ROUND(SUM(trade_sol), 2) AS volume_sol,
-            ROUND(SUM(creator_fee), 2) AS creator_fees_sol,
-            ROUND(SUM(protocol_fee), 2) AS protocol_fees_sol,
-            ROUND(AVG(creator_fee / NULLIF(trade_sol, 0)) * 100, 4) AS avg_creator_fee_pct,
-            ROUND(SUM(creator_fee) * 100.0 / NULLIF(SUM(trade_sol), 0), 4) AS effective_creator_rate,
-            ROUND(SUM(trade_sol) * 100.0 / SUM(SUM(trade_sol)) OVER(), 2) AS pct_of_total_volume
-        FROM trades GROUP BY 1
-        ORDER BY CASE curve_stage
-            WHEN 'Early (0-5 SOL)' THEN 1 WHEN 'Growth (5-15)' THEN 2
-            WHEN 'Mid (15-30)' THEN 3 WHEN 'Late (30-50)' THEN 4
-            WHEN 'Near-Grad (50-79)' THEN 5 ELSE 6 END
-    """,
-    "fee_vs_survival": """
-        WITH token_fees AS (
-            SELECT
-                t.mint,
-                AVG(t.creator_fee_sol_amount / NULLIF(t.sol_amount, 0)) * 100 AS avg_fee_pct,
-                COUNT(*) AS trades,
-                SUM(t.sol_amount / 1e9) AS volume_sol,
-                DATE_DIFF('minute', MIN(t.evt_block_time), MAX(t.evt_block_time)) AS life_min
-            FROM pumpdotfun_solana.pump_evt_tradeevent t
-            WHERE t.evt_block_date >= CURRENT_DATE - INTERVAL '14' DAY
-            GROUP BY 1 HAVING COUNT(*) >= 5
-        )
-        SELECT
-            CASE
-                WHEN avg_fee_pct < 0.5 THEN '< 0.5%'
-                WHEN avg_fee_pct < 1.0 THEN '0.5-1%'
-                WHEN avg_fee_pct < 2.0 THEN '1-2%'
-                WHEN avg_fee_pct < 5.0 THEN '2-5%'
-                ELSE '5%+'
-            END AS fee_tier,
-            COUNT(*) AS tokens,
-            ROUND(AVG(life_min), 0) AS avg_lifespan_min,
-            ROUND(APPROX_PERCENTILE(life_min, 0.5), 0) AS median_lifespan_min,
-            ROUND(AVG(trades), 0) AS avg_trades,
-            ROUND(AVG(volume_sol), 2) AS avg_volume_sol
-        FROM token_fees GROUP BY 1
-        ORDER BY CASE fee_tier
-            WHEN '< 0.5%' THEN 1 WHEN '0.5-1%' THEN 2
-            WHEN '1-2%' THEN 3 WHEN '2-5%' THEN 4 ELSE 5 END
-    """,
-    "variable_fee_model": """
-        WITH trades AS (
-            SELECT
-                sol_amount / 1e9 AS trade_sol,
-                real_sol_reserves / 1e9 AS reserves,
-                creator_fee_sol_amount / 1e9 AS actual_creator_fee,
-                sol_amount * 0.01 / 1e9 AS current_protocol_fee,
-                CASE
-                    WHEN real_sol_reserves / 1e9 < 10 THEN sol_amount * 0.02 / 1e9
-                    WHEN real_sol_reserves / 1e9 < 30 THEN sol_amount * 0.015 / 1e9
-                    WHEN real_sol_reserves / 1e9 < 60 THEN sol_amount * 0.01 / 1e9
-                    ELSE sol_amount * 0.005 / 1e9
-                END AS model_growth_fee,
-                CASE
-                    WHEN real_sol_reserves / 1e9 < 10 THEN sol_amount * 0.005 / 1e9
-                    WHEN real_sol_reserves / 1e9 < 30 THEN sol_amount * 0.01 / 1e9
-                    WHEN real_sol_reserves / 1e9 < 60 THEN sol_amount * 0.015 / 1e9
-                    ELSE sol_amount * 0.02 / 1e9
-                END AS model_retention_fee,
-                CASE
-                    WHEN real_sol_reserves / 1e9 < 5 THEN sol_amount * 0.0095 / 1e9
-                    WHEN real_sol_reserves / 1e9 < 20 THEN sol_amount * 0.007 / 1e9
-                    WHEN real_sol_reserves / 1e9 < 50 THEN sol_amount * 0.003 / 1e9
-                    ELSE sol_amount * 0.0005 / 1e9
-                END AS model_ascend_fee
-            FROM pumpdotfun_solana.pump_evt_tradeevent
-            WHERE evt_block_date >= CURRENT_DATE - INTERVAL '7' DAY
-        )
-        SELECT 'Current (Flat 1%)' AS model, ROUND(SUM(current_protocol_fee), 2) AS total_fee_sol,
-            COUNT(*) AS trades FROM trades
-        UNION ALL
-        SELECT 'Growth-Optimized (2%→0.5%)', ROUND(SUM(model_growth_fee), 2), COUNT(*) FROM trades
-        UNION ALL
-        SELECT 'Retention-Optimized (0.5%→2%)', ROUND(SUM(model_retention_fee), 2), COUNT(*) FROM trades
-        UNION ALL
-        SELECT 'Ascend-Style Sliding', ROUND(SUM(model_ascend_fee), 2), COUNT(*) FROM trades
-    """,
-    "fee_curve_granular": """
-        SELECT
-            ROUND(real_sol_reserves / 1e9, 0) AS reserve_bucket_sol,
-            COUNT(*) AS trades,
-            ROUND(SUM(sol_amount / 1e9), 2) AS volume_sol,
-            ROUND(SUM(creator_fee_sol_amount / 1e9), 2) AS creator_fees,
-            ROUND(AVG(creator_fee_sol_amount * 100.0 / NULLIF(sol_amount, 0)), 4) AS avg_creator_fee_pct
-        FROM pumpdotfun_solana.pump_evt_tradeevent
-        WHERE evt_block_date >= CURRENT_DATE - INTERVAL '7' DAY
-            AND real_sol_reserves / 1e9 BETWEEN 0 AND 100
-        GROUP BY 1
-        HAVING COUNT(*) >= 100
-        ORDER BY 1
-    """,
+# ─── Saved Query IDs ──────────────────────────────────────────
+QUERY_IDS = {
+    "daily_launches":      6773306,  # param: days
+    "daily_volume":        6773308,  # param: days
+    "graduation_rate":     6773311,  # param: days
+    "fee_revenue":         6773313,  # param: days
+    "trade_size_dist":     6773326,
+    "token_survival":      6773327,
+    "bonding_curve":       6773328,
+    "top_traders_pnl":     6773330,
+    "whale_tracker":       6773331,
+    "sandwich_detection":  6773332,
+    "bot_activity":        6773333,  # param: days
+    "hourly_pattern":      6773334,
+    "price_impact":        6773335,  # param: days
+    "creator_leaderboard": 6773337,
+    "new_vs_returning":    6773338,  # param: days
+    "fee_by_curve_stage":  6773339,
+    "fee_vs_survival":     6773340,
+    "variable_fee_model":  6773341,
+    "fee_curve_granular":  6773343,
 }
+
+# Queries that accept a 'days' parameter
+_PARAMETERIZED = {"daily_launches", "daily_volume", "graduation_rate", "fee_revenue",
+                   "bot_activity", "price_impact", "new_vs_returning"}
 
 # ─── Data Loading ──────────────────────────────────────────────
 @st.cache_data(ttl=600, show_spinner=False)
-def run_q(sql):
+def run_query(query_id, params=None):
     if not DUNE_API_KEY:
         return pd.DataFrame()
-    return DuneClient(DUNE_API_KEY).execute_sql(sql)
+    return DuneClient(DUNE_API_KEY).execute_query(query_id, params)
 
 def load(key, days=30):
-    return run_q(QUERIES[key].format(days=days))
+    qid = QUERY_IDS[key]
+    params = {"days": days} if key in _PARAMETERIZED else None
+    return run_query(qid, params)
 
 def shorten(addr):
     s = str(addr or "")
@@ -1583,7 +1303,7 @@ st.markdown(f"""
     <a href="https://dune.com" target="_blank">Dune Analytics</a> ·
     CoinGecko · DeFiLlama</p>
     <p class="sub">{datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')} ·
-    {len(QUERIES)} DuneSQL queries · Decoded events · Real-time</p>
+    {len(QUERY_IDS)} DuneSQL queries · Decoded events · Real-time</p>
     <div class="tech-stack">
         <span class="tech-pill">Streamlit</span>
         <span class="tech-pill">Plotly</span>
