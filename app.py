@@ -1,6 +1,6 @@
 """
 Pump.fun Protocol Analytics Dashboard
-Senior Data Analyst Portfolio — Built by Ryan
+Senior Data Analyst Portfolio — Built by Ryan Holloway
 Streamlit + Dune Analytics API + CoinGecko + DeFiLlama
 """
 
@@ -312,7 +312,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ─── Constants ─────────────────────────────────────────────────
-DUNE_API_KEY = os.environ.get("DUNE_API_KEY", "") or st.secrets.get("DUNE_API_KEY", "")
+try:
+    DUNE_API_KEY = os.environ.get("DUNE_API_KEY", "") or st.secrets.get("DUNE_API_KEY", "")
+except Exception:
+    DUNE_API_KEY = os.environ.get("DUNE_API_KEY", "")
 DUNE_BASE = "https://api.dune.com/api/v1"
 
 PURPLE = "#7c3aed"
@@ -357,46 +360,63 @@ def apply_chart(fig, height=380):
     return fig
 
 
-# ─── Dune API Client (execute saved queries by ID) ───────────
+# ─── Dune API Client (cached results first, execute as fallback) ──
 class DuneClient:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.headers = {"X-Dune-API-Key": api_key}
 
-    def execute_query(self, query_id: int, params: dict = None) -> pd.DataFrame:
-        url = f"{DUNE_BASE}/query/{query_id}/execute"
+    def get_results(self, query_id: int, params: dict = None) -> pd.DataFrame:
+        # 1. Try cached results (instant, no credits used)
+        try:
+            r = requests.get(
+                f"{DUNE_BASE}/query/{query_id}/results",
+                headers=self.headers, timeout=30,
+            )
+            if r.status_code == 200:
+                rows = r.json().get("result", {}).get("rows", [])
+                if rows:
+                    return pd.DataFrame(rows)
+        except Exception:
+            pass
+
+        # 2. Fallback: execute + poll
         body = {}
         if params:
             body["query_parameters"] = [
                 {"key": k, "value": str(v), "type": "number"} for k, v in params.items()
             ]
         try:
-            resp = requests.post(url, headers=self.headers, json=body, timeout=30)
-            if resp.status_code != 200:
+            r = requests.post(
+                f"{DUNE_BASE}/query/{query_id}/execute",
+                headers=self.headers, json=body, timeout=30,
+            )
+            if r.status_code != 200:
                 return pd.DataFrame()
-            eid = resp.json().get("execution_id")
+            eid = r.json().get("execution_id")
             if not eid:
                 return pd.DataFrame()
             return self._poll(eid)
         except Exception:
             return pd.DataFrame()
 
-    def _poll(self, eid: str, timeout: int = 300) -> pd.DataFrame:
+    def _poll(self, eid: str, timeout: int = 120) -> pd.DataFrame:
         url = f"{DUNE_BASE}/execution/{eid}/results"
         t0 = time.time()
-        try:
-            while time.time() - t0 < timeout:
+        while time.time() - t0 < timeout:
+            try:
                 r = requests.get(url, headers=self.headers, timeout=30)
                 if r.status_code != 200:
                     return pd.DataFrame()
                 d = r.json()
-                if d.get("state") == "QUERY_STATE_COMPLETED":
+                state = d.get("state")
+                if state == "QUERY_STATE_COMPLETED":
                     return pd.DataFrame(d.get("result", {}).get("rows", []))
-                if d.get("state") in ("QUERY_STATE_FAILED", "QUERY_STATE_CANCELLED"):
+                if state in ("QUERY_STATE_FAILED", "QUERY_STATE_CANCELLED"):
                     return pd.DataFrame()
-                time.sleep(3)
-        except Exception:
-            return pd.DataFrame()
+                time.sleep(2)
+            except Exception:
+                return pd.DataFrame()
         return pd.DataFrame()
 
 
@@ -468,6 +488,10 @@ QUERY_IDS = {
     "fee_vs_survival":     6773340,
     "variable_fee_model":  6773341,
     "fee_curve_granular":  6773343,
+    "bot_market_share":    6773358,
+    "sandwich_profit":     6773359,
+    "smart_money":         6773360,
+    "mev_impact_rate":     6773363,
 }
 
 # Queries that accept a 'days' parameter
@@ -479,7 +503,7 @@ _PARAMETERIZED = {"daily_launches", "daily_volume", "graduation_rate", "fee_reve
 def run_query(query_id, params=None):
     if not DUNE_API_KEY:
         return pd.DataFrame()
-    return DuneClient(DUNE_API_KEY).execute_query(query_id, params)
+    return DuneClient(DUNE_API_KEY).get_results(query_id, params)
 
 def load(key, days=30):
     qid = QUERY_IDS[key]
@@ -551,18 +575,15 @@ with st.sidebar:
         "**PnL:** Net SOL received minus spent per wallet."
     )
     st.divider()
-    st.caption("Built by Ryan")
+    st.caption("Built by Ryan Holloway")
 
 
 # ─── Load Data ─────────────────────────────────────────────────
-if not DUNE_API_KEY:
-    st.info("Set `DUNE_API_KEY` environment variable for live data. Showing layout preview.")
-
 with st.spinner("Querying Dune Analytics..."):
     D = {}
     for k in ["daily_volume", "graduation_rate", "daily_launches", "fee_revenue",
               "trade_size_dist", "token_survival", "bonding_curve", "hourly_pattern", "price_impact"]:
-        D[k] = load(k, days) if DUNE_API_KEY else pd.DataFrame()
+        D[k] = load(k, days)
 
 sol = get_sol_price()
 sol_hist = get_sol_history(days)
@@ -678,7 +699,7 @@ with tab1:
             fig.update_traces(marker_line_width=0)
             st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption("Connect Dune API for live data")
+            st.caption("Loading data...")
 
     with c2:
         st.markdown('<div class="chart-card"><h4>Daily Unique Traders</h4></div>', unsafe_allow_html=True)
@@ -689,7 +710,7 @@ with tab1:
                 hovertemplate="%{x|%b %d}: <b>%{y:,.0f}</b> traders<extra></extra>"))
             st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption("Connect Dune API for live data")
+            st.caption("Loading data...")
 
     c3, c4 = st.columns(2)
     with c3:
@@ -703,7 +724,7 @@ with tab1:
             fig.update_yaxes(ticksuffix="%")
             st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption("Connect Dune API for live data")
+            st.caption("Loading data...")
 
     with c4:
         st.markdown('<div class="chart-card"><h4>Buy vs Sell Volume (SOL)</h4></div>', unsafe_allow_html=True)
@@ -716,19 +737,18 @@ with tab1:
             fig.update_layout(barmode="stack")
             st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption("Connect Dune API for live data")
+            st.caption("Loading data...")
 
     # New vs Returning
-    if DUNE_API_KEY:
-        st.markdown('<div class="chart-card"><h4>New vs Returning Traders</h4></div>', unsafe_allow_html=True)
-        nr = load("new_vs_returning", days)
-        if not nr.empty:
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=nr["day"], y=nr["new_traders"], name="New",
-                stackgroup="one", line=dict(width=0), fillcolor="rgba(124,58,237,0.4)"))
-            fig.add_trace(go.Scatter(x=nr["day"], y=nr["returning_traders"], name="Returning",
-                stackgroup="one", line=dict(width=0), fillcolor="rgba(6,182,212,0.3)"))
-            st.plotly_chart(apply_chart(fig, 300), use_container_width=True, config={"displayModeBar": False})
+    st.markdown('<div class="chart-card"><h4>New vs Returning Traders</h4></div>', unsafe_allow_html=True)
+    nr = load("new_vs_returning", days)
+    if not nr.empty:
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=nr["day"], y=nr["new_traders"], name="New",
+            stackgroup="one", line=dict(width=0), fillcolor="rgba(124,58,237,0.4)"))
+        fig.add_trace(go.Scatter(x=nr["day"], y=nr["returning_traders"], name="Returning",
+            stackgroup="one", line=dict(width=0), fillcolor="rgba(6,182,212,0.3)"))
+        st.plotly_chart(apply_chart(fig, 300), use_container_width=True, config={"displayModeBar": False})
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -754,7 +774,7 @@ with tab2:
                 line=dict(color=ORANGE, width=2.5, dash="dot")))
             st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption("Connect Dune API for live data")
+            st.caption("Loading data...")
 
     with c2:
         st.markdown('<div class="chart-card"><h4>Trade Size Distribution (7d)</h4></div>', unsafe_allow_html=True)
@@ -770,7 +790,7 @@ with tab2:
             fig.update_layout(showlegend=False)
             st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption("Connect Dune API for live data")
+            st.caption("Loading data...")
 
     c3, c4 = st.columns(2)
     with c3:
@@ -790,7 +810,7 @@ with tab2:
             fig.update_yaxes(ticksuffix="%")
             st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption("Connect Dune API for live data")
+            st.caption("Loading data...")
 
     with c4:
         st.markdown('<div class="chart-card"><h4>Intraday Trading Pattern (UTC)</h4></div>', unsafe_allow_html=True)
@@ -808,7 +828,7 @@ with tab2:
             fig.update_yaxes(title_text="Traders", secondary_y=True)
             st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption("Connect Dune API for live data")
+            st.caption("Loading data...")
 
     # Volume vs SOL price
     if not sol_hist.empty and not vol_df.empty:
@@ -842,7 +862,7 @@ with tab3:
             fig.update_layout(barmode="stack")
             st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption("Connect Dune API for live data")
+            st.caption("Loading data...")
 
     with c2:
         st.markdown('<div class="chart-card"><h4>Cumulative Revenue (USD)</h4></div>', unsafe_allow_html=True)
@@ -879,12 +899,9 @@ with tab3:
 
     # Creator Leaderboard
     st.markdown('<div class="chart-card"><h4>Top Creator Fee Earners (7d)</h4></div>', unsafe_allow_html=True)
-    if DUNE_API_KEY:
-        cl = load("creator_leaderboard", 7)
-        if not cl.empty:
-            st.dataframe(cl, use_container_width=True, hide_index=True, height=400)
-    else:
-        st.caption("Connect Dune API for live data")
+    cl = load("creator_leaderboard", 7)
+    if not cl.empty:
+        st.dataframe(cl, use_container_width=True, hide_index=True, height=400)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -899,220 +916,192 @@ with tab7:
         unsafe_allow_html=True)
 
     # Fee by Curve Stage
-    if DUNE_API_KEY:
-        fcs = load("fee_by_curve_stage")
-        if not fcs.empty:
-            # Volume & Fees by Curve Stage
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown('<div class="chart-card"><h4>Volume Distribution by Curve Stage</h4></div>', unsafe_allow_html=True)
-                stage_colors = [RED, ORANGE, YELLOW, CYAN, BLUE, GREEN]
-                fig = go.Figure(go.Bar(
-                    x=fcs["curve_stage"], y=fcs["pct_of_total_volume"],
-                    marker=dict(color=stage_colors[:len(fcs)], line=dict(color="#06060b", width=1)),
-                    text=[f"{v:.1f}%" for v in fcs["pct_of_total_volume"]], textposition="outside",
-                    textfont=dict(color="#6b6b88", size=11),
-                    hovertemplate="%{x}<br><b>%{y:.1f}%</b> of volume<extra></extra>"))
-                fig.update_yaxes(ticksuffix="%", title_text="% of Total Volume")
-                fig.update_layout(showlegend=False)
-                st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
-
-            with c2:
-                st.markdown('<div class="chart-card"><h4>Effective Creator Fee Rate by Stage</h4></div>', unsafe_allow_html=True)
-                fig = go.Figure()
-                fig.add_trace(go.Bar(
-                    x=fcs["curve_stage"], y=fcs["effective_creator_rate"],
-                    marker=dict(color=stage_colors[:len(fcs)], line=dict(color="#06060b", width=1)),
-                    text=[f"{v:.2f}%" for v in fcs["effective_creator_rate"]], textposition="outside",
-                    textfont=dict(color="#6b6b88", size=11),
-                    hovertemplate="%{x}<br>Effective rate: <b>%{y:.3f}%</b><extra></extra>"))
-                fig.update_yaxes(ticksuffix="%", title_text="Effective Fee Rate")
-                fig.update_layout(showlegend=False)
-                st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
-
-            # Stacked fees: creator vs protocol by stage
-            st.markdown('<div class="chart-card"><h4>Creator vs Protocol Fees by Curve Stage (SOL)</h4></div>', unsafe_allow_html=True)
-            fig = go.Figure()
-            fig.add_trace(go.Bar(x=fcs["curve_stage"], y=fcs["protocol_fees_sol"],
-                name="Protocol Fee (1%)", marker_color=PURPLE, opacity=0.85))
-            fig.add_trace(go.Bar(x=fcs["curve_stage"], y=fcs["creator_fees_sol"],
-                name="Creator Fee", marker_color=CYAN, opacity=0.85))
-            fig.update_layout(barmode="group")
-            fig.update_yaxes(title_text="SOL")
-            st.plotly_chart(apply_chart(fig, 340), use_container_width=True, config={"displayModeBar": False})
-
-            # Key insight from the data
-            early_pct = fcs.iloc[0]["pct_of_total_volume"] if len(fcs) > 0 else 0
-            late_stages = fcs[fcs["curve_stage"].str.contains("Late|Near-Grad|Post")]
-            late_pct = late_stages["pct_of_total_volume"].sum() if not late_stages.empty else 0
-            st.markdown(f"""
-            <div class="insight-grid">
-                <div class="insight">
-                    <div class="tag">KEY FINDING</div>
-                    <h4>Where Fees Are Generated</h4>
-                    <p><strong>{early_pct:.1f}%</strong> of volume happens in the early stage (0-5 SOL reserves).
-                    This means fee changes at the bottom of the curve have outsized revenue impact —
-                    but also affect the most price-sensitive, speculative traders.</p>
-                </div>
-                <div class="insight">
-                    <div class="tag">OPTIMIZATION SURFACE</div>
-                    <h4>Pre vs Post Graduation</h4>
-                    <p>Only <strong>{late_pct:.1f}%</strong> of volume reaches the late/graduation stages.
-                    A growth-optimized fee would <strong>reduce early fees to boost survival</strong>
-                    and increase late fees where traders have higher conviction.</p>
-                </div>
-                <div class="insight">
-                    <div class="tag">DESIGN QUESTION</div>
-                    <h4>The Trade-Off</h4>
-                    <p>Lower early fees → more tokens survive → more graduations → more post-grad volume.
-                    But does the <strong>increased token survival offset lost early revenue</strong>?
-                    The variable fee model below tests this hypothesis.</p>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # Variable Fee Model Comparison
-        vfm = load("variable_fee_model")
-        if not vfm.empty:
-            st.markdown('<div class="chart-card"><h4>Variable Fee Model Comparison (7d Revenue)</h4></div>', unsafe_allow_html=True)
-            model_colors = [PURPLE, GREEN, ORANGE, CYAN]
+    fcs = load("fee_by_curve_stage")
+    if not fcs.empty:
+        # Volume & Fees by Curve Stage
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown('<div class="chart-card"><h4>Volume Distribution by Curve Stage</h4></div>', unsafe_allow_html=True)
+            stage_colors = [RED, ORANGE, YELLOW, CYAN, BLUE, GREEN]
             fig = go.Figure(go.Bar(
-                x=vfm["model"], y=vfm["total_fee_sol"],
-                marker=dict(color=model_colors[:len(vfm)], line=dict(color="#06060b", width=1)),
-                text=[f"{v:,.0f} SOL" for v in vfm["total_fee_sol"]], textposition="outside",
-                textfont=dict(color="#6b6b88", size=12, family="JetBrains Mono"),
-                hovertemplate="%{x}<br><b>%{y:,.0f} SOL</b><extra></extra>"))
-            fig.update_yaxes(title_text="Total Fee Revenue (SOL)")
+                x=fcs["curve_stage"], y=fcs["pct_of_total_volume"],
+                marker=dict(color=stage_colors[:len(fcs)], line=dict(color="#06060b", width=1)),
+                text=[f"{v:.1f}%" for v in fcs["pct_of_total_volume"]], textposition="outside",
+                textfont=dict(color="#6b6b88", size=11),
+                hovertemplate="%{x}<br><b>%{y:.1f}%</b> of volume<extra></extra>"))
+            fig.update_yaxes(ticksuffix="%", title_text="% of Total Volume")
             fig.update_layout(showlegend=False)
-            st.plotly_chart(apply_chart(fig, 400), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
 
-            # Model explanations
-            sp = sol["price"] or 1
-            st.markdown(f"""
-            <div class="insight-grid">
-                <div class="insight">
-                    <div class="tag">GROWTH-OPTIMIZED</div>
-                    <h4>2% Early → 0.5% Late</h4>
-                    <p>Front-loads fees when tokens are cheap and speculative. Captures maximum value
-                    from the <strong>high-volume early stage</strong>, but may discourage initial traders.
-                    Revenue: <strong>{vfm[vfm['model'].str.contains('Growth')]['total_fee_sol'].iloc[0]:,.0f} SOL</strong>
-                    (${vfm[vfm['model'].str.contains('Growth')]['total_fee_sol'].iloc[0]*sp:,.0f}).</p>
-                </div>
-                <div class="insight">
-                    <div class="tag">RETENTION-OPTIMIZED</div>
-                    <h4>0.5% Early → 2% Late</h4>
-                    <p>Subsidizes early trading to <strong>maximize token survival</strong> and graduation.
-                    Higher fees later capture value from committed traders. Revenue:
-                    <strong>{vfm[vfm['model'].str.contains('Retention')]['total_fee_sol'].iloc[0]:,.0f} SOL</strong>
-                    (${vfm[vfm['model'].str.contains('Retention')]['total_fee_sol'].iloc[0]*sp:,.0f}).</p>
-                </div>
-                <div class="insight">
-                    <div class="tag">ASCEND-STYLE</div>
-                    <h4>Sliding by Market Cap</h4>
-                    <p>Mirrors Project Ascend's actual design: <strong>0.95% under $300K → 0.05% above $20M</strong>.
-                    Creator-aligned but with reduced protocol take at scale. Revenue:
-                    <strong>{vfm[vfm['model'].str.contains('Ascend')]['total_fee_sol'].iloc[0]:,.0f} SOL</strong>
-                    (${vfm[vfm['model'].str.contains('Ascend')]['total_fee_sol'].iloc[0]*sp:,.0f}).</p>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # Granular fee curve
-        fcg = load("fee_curve_granular")
-        if not fcg.empty:
-            st.markdown('<div class="chart-card"><h4>Fee Landscape: Creator Fee % vs Reserve Level</h4></div>', unsafe_allow_html=True)
-            fig = make_subplots(specs=[[{"secondary_y": True}]])
+        with c2:
+            st.markdown('<div class="chart-card"><h4>Effective Creator Fee Rate by Stage</h4></div>', unsafe_allow_html=True)
+            fig = go.Figure()
             fig.add_trace(go.Bar(
-                x=fcg["reserve_bucket_sol"], y=fcg["volume_sol"], name="Volume (SOL)",
-                marker_color="rgba(124,58,237,0.15)", opacity=0.6),
-                secondary_y=False)
-            fig.add_trace(go.Scatter(
-                x=fcg["reserve_bucket_sol"], y=fcg["avg_creator_fee_pct"], name="Avg Creator Fee %",
-                line=dict(color=CYAN, width=3), mode="lines",
-                hovertemplate="Reserve: %{x} SOL<br>Avg Fee: <b>%{y:.3f}%</b><extra></extra>"),
-                secondary_y=True)
-            fig.update_xaxes(title_text="Reserve Level (SOL)", dtick=10)
-            fig.update_yaxes(title_text="Volume (SOL)", secondary_y=False)
-            fig.update_yaxes(title_text="Avg Creator Fee %", ticksuffix="%", secondary_y=True)
-            st.plotly_chart(apply_chart(fig, 400), use_container_width=True, config={"displayModeBar": False})
+                x=fcs["curve_stage"], y=fcs["effective_creator_rate"],
+                marker=dict(color=stage_colors[:len(fcs)], line=dict(color="#06060b", width=1)),
+                text=[f"{v:.2f}%" for v in fcs["effective_creator_rate"]], textposition="outside",
+                textfont=dict(color="#6b6b88", size=11),
+                hovertemplate="%{x}<br>Effective rate: <b>%{y:.3f}%</b><extra></extra>"))
+            fig.update_yaxes(ticksuffix="%", title_text="Effective Fee Rate")
+            fig.update_layout(showlegend=False)
+            st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
 
-        # Fee vs Survival
-        fvs = load("fee_vs_survival")
-        if not fvs.empty:
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown('<div class="chart-card"><h4>Token Lifespan by Creator Fee Tier</h4></div>', unsafe_allow_html=True)
-                fig = go.Figure()
-                fig.add_trace(go.Bar(x=fvs["fee_tier"], y=fvs["median_lifespan_min"],
-                    name="Median", marker_color=PURPLE, opacity=0.7))
-                fig.add_trace(go.Bar(x=fvs["fee_tier"], y=fvs["avg_lifespan_min"],
-                    name="Mean", marker_color=CYAN, opacity=0.7))
-                fig.update_layout(barmode="group")
-                fig.update_yaxes(title_text="Lifespan (minutes)")
-                st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
+        # Stacked fees: creator vs protocol by stage
+        st.markdown('<div class="chart-card"><h4>Creator vs Protocol Fees by Curve Stage (SOL)</h4></div>', unsafe_allow_html=True)
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=fcs["curve_stage"], y=fcs["protocol_fees_sol"],
+            name="Protocol Fee (1%)", marker_color=PURPLE, opacity=0.85))
+        fig.add_trace(go.Bar(x=fcs["curve_stage"], y=fcs["creator_fees_sol"],
+            name="Creator Fee", marker_color=CYAN, opacity=0.85))
+        fig.update_layout(barmode="group")
+        fig.update_yaxes(title_text="SOL")
+        st.plotly_chart(apply_chart(fig, 340), use_container_width=True, config={"displayModeBar": False})
 
-            with c2:
-                st.markdown('<div class="chart-card"><h4>Avg Volume by Creator Fee Tier</h4></div>', unsafe_allow_html=True)
-                fig = go.Figure(go.Bar(
-                    x=fvs["fee_tier"], y=fvs["avg_volume_sol"],
-                    marker=dict(color=fvs["avg_volume_sol"],
-                        colorscale=[[0, "rgba(124,58,237,0.3)"], [1, PURPLE]]),
-                    text=[f"{v:.1f}" for v in fvs["avg_volume_sol"]], textposition="outside",
-                    textfont=dict(color="#6b6b88", size=11),
-                    hovertemplate="%{x}<br>Avg Vol: <b>%{y:.1f} SOL</b><extra></extra>"))
-                fig.update_yaxes(title_text="Avg Volume (SOL)")
-                fig.update_layout(showlegend=False)
-                st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
-
-            st.markdown("""
-            <div class="insight-grid">
-                <div class="insight">
-                    <div class="tag">RECOMMENDATION</div>
-                    <h4>Variable Fee Design</h4>
-                    <p>The data suggests a <strong>concave fee curve</strong> — start moderate (not high) to avoid
-                    killing early momentum, peak at mid-curve where conviction is building, then taper to retain
-                    graduated tokens in the PumpSwap ecosystem.</p>
-                </div>
-                <div class="insight">
-                    <div class="tag">CREATOR ALIGNMENT</div>
-                    <h4>Fee Sharing Matters</h4>
-                    <p>Tokens with creator fees in the <strong>0.5-2% range</strong> show healthier trading patterns.
-                    Too low = no creator incentive to promote. Too high = deters traders.
-                    The sweet spot balances <strong>creator revenue with trader friction</strong>.</p>
-                </div>
-                <div class="insight">
-                    <div class="tag">NEXT STEPS</div>
-                    <h4>A/B Testing Framework</h4>
-                    <p>Deploy 2-3 fee curves simultaneously on new token launches, measure graduation rate,
-                    30-day volume retention, and creator engagement. Use <strong>causal inference</strong>
-                    (not just correlation) to identify the optimal fee function.</p>
-                </div>
+        # Key insight from the data
+        early_pct = fcs.iloc[0]["pct_of_total_volume"] if len(fcs) > 0 else 0
+        late_stages = fcs[fcs["curve_stage"].str.contains("Late|Near-Grad|Post")]
+        late_pct = late_stages["pct_of_total_volume"].sum() if not late_stages.empty else 0
+        st.markdown(f"""
+        <div class="insight-grid">
+            <div class="insight">
+                <div class="tag">KEY FINDING</div>
+                <h4>Where Fees Are Generated</h4>
+                <p><strong>{early_pct:.1f}%</strong> of volume happens in the early stage (0-5 SOL reserves).
+                This means fee changes at the bottom of the curve have outsized revenue impact —
+                but also affect the most price-sensitive, speculative traders.</p>
             </div>
-            """, unsafe_allow_html=True)
+            <div class="insight">
+                <div class="tag">OPTIMIZATION SURFACE</div>
+                <h4>Pre vs Post Graduation</h4>
+                <p>Only <strong>{late_pct:.1f}%</strong> of volume reaches the late/graduation stages.
+                A growth-optimized fee would <strong>reduce early fees to boost survival</strong>
+                and increase late fees where traders have higher conviction.</p>
+            </div>
+            <div class="insight">
+                <div class="tag">DESIGN QUESTION</div>
+                <h4>The Trade-Off</h4>
+                <p>Lower early fees → more tokens survive → more graduations → more post-grad volume.
+                But does the <strong>increased token survival offset lost early revenue</strong>?
+                The variable fee model below tests this hypothesis.</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    else:
-        st.info("Connect Dune API for live fee optimization analysis")
+    # Variable Fee Model Comparison
+    vfm = load("variable_fee_model")
+    if not vfm.empty:
+        st.markdown('<div class="chart-card"><h4>Variable Fee Model Comparison (7d Revenue)</h4></div>', unsafe_allow_html=True)
+        model_colors = [PURPLE, GREEN, ORANGE, CYAN]
+        fig = go.Figure(go.Bar(
+            x=vfm["model"], y=vfm["total_fee_sol"],
+            marker=dict(color=model_colors[:len(vfm)], line=dict(color="#06060b", width=1)),
+            text=[f"{v:,.0f} SOL" for v in vfm["total_fee_sol"]], textposition="outside",
+            textfont=dict(color="#6b6b88", size=12, family="JetBrains Mono"),
+            hovertemplate="%{x}<br><b>%{y:,.0f} SOL</b><extra></extra>"))
+        fig.update_yaxes(title_text="Total Fee Revenue (SOL)")
+        fig.update_layout(showlegend=False)
+        st.plotly_chart(apply_chart(fig, 400), use_container_width=True, config={"displayModeBar": False})
 
-        # Show demo structure even without API key
+        # Model explanations
+        sp = sol["price"] or 1
+        st.markdown(f"""
+        <div class="insight-grid">
+            <div class="insight">
+                <div class="tag">GROWTH-OPTIMIZED</div>
+                <h4>2% Early → 0.5% Late</h4>
+                <p>Front-loads fees when tokens are cheap and speculative. Captures maximum value
+                from the <strong>high-volume early stage</strong>, but may discourage initial traders.
+                Revenue: <strong>{vfm[vfm['model'].str.contains('Growth')]['total_fee_sol'].iloc[0]:,.0f} SOL</strong>
+                (${vfm[vfm['model'].str.contains('Growth')]['total_fee_sol'].iloc[0]*sp:,.0f}).</p>
+            </div>
+            <div class="insight">
+                <div class="tag">RETENTION-OPTIMIZED</div>
+                <h4>0.5% Early → 2% Late</h4>
+                <p>Subsidizes early trading to <strong>maximize token survival</strong> and graduation.
+                Higher fees later capture value from committed traders. Revenue:
+                <strong>{vfm[vfm['model'].str.contains('Retention')]['total_fee_sol'].iloc[0]:,.0f} SOL</strong>
+                (${vfm[vfm['model'].str.contains('Retention')]['total_fee_sol'].iloc[0]*sp:,.0f}).</p>
+            </div>
+            <div class="insight">
+                <div class="tag">ASCEND-STYLE</div>
+                <h4>Sliding by Market Cap</h4>
+                <p>Mirrors Project Ascend's actual design: <strong>0.95% under $300K → 0.05% above $20M</strong>.
+                Creator-aligned but with reduced protocol take at scale. Revenue:
+                <strong>{vfm[vfm['model'].str.contains('Ascend')]['total_fee_sol'].iloc[0]:,.0f} SOL</strong>
+                (${vfm[vfm['model'].str.contains('Ascend')]['total_fee_sol'].iloc[0]*sp:,.0f}).</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Granular fee curve
+    fcg = load("fee_curve_granular")
+    if not fcg.empty:
+        st.markdown('<div class="chart-card"><h4>Fee Landscape: Creator Fee % vs Reserve Level</h4></div>', unsafe_allow_html=True)
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        fig.add_trace(go.Bar(
+            x=fcg["reserve_bucket_sol"], y=fcg["volume_sol"], name="Volume (SOL)",
+            marker_color="rgba(124,58,237,0.15)", opacity=0.6),
+            secondary_y=False)
+        fig.add_trace(go.Scatter(
+            x=fcg["reserve_bucket_sol"], y=fcg["avg_creator_fee_pct"], name="Avg Creator Fee %",
+            line=dict(color=CYAN, width=3), mode="lines",
+            hovertemplate="Reserve: %{x} SOL<br>Avg Fee: <b>%{y:.3f}%</b><extra></extra>"),
+            secondary_y=True)
+        fig.update_xaxes(title_text="Reserve Level (SOL)", dtick=10)
+        fig.update_yaxes(title_text="Volume (SOL)", secondary_y=False)
+        fig.update_yaxes(title_text="Avg Creator Fee %", ticksuffix="%", secondary_y=True)
+        st.plotly_chart(apply_chart(fig, 400), use_container_width=True, config={"displayModeBar": False})
+
+    # Fee vs Survival
+    fvs = load("fee_vs_survival")
+    if not fvs.empty:
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown('<div class="chart-card"><h4>Token Lifespan by Creator Fee Tier</h4></div>', unsafe_allow_html=True)
+            fig = go.Figure()
+            fig.add_trace(go.Bar(x=fvs["fee_tier"], y=fvs["median_lifespan_min"],
+                name="Median", marker_color=PURPLE, opacity=0.7))
+            fig.add_trace(go.Bar(x=fvs["fee_tier"], y=fvs["avg_lifespan_min"],
+                name="Mean", marker_color=CYAN, opacity=0.7))
+            fig.update_layout(barmode="group")
+            fig.update_yaxes(title_text="Lifespan (minutes)")
+            st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
+
+        with c2:
+            st.markdown('<div class="chart-card"><h4>Avg Volume by Creator Fee Tier</h4></div>', unsafe_allow_html=True)
+            fig = go.Figure(go.Bar(
+                x=fvs["fee_tier"], y=fvs["avg_volume_sol"],
+                marker=dict(color=fvs["avg_volume_sol"],
+                    colorscale=[[0, "rgba(124,58,237,0.3)"], [1, PURPLE]]),
+                text=[f"{v:.1f}" for v in fvs["avg_volume_sol"]], textposition="outside",
+                textfont=dict(color="#6b6b88", size=11),
+                hovertemplate="%{x}<br>Avg Vol: <b>%{y:.1f} SOL</b><extra></extra>"))
+            fig.update_yaxes(title_text="Avg Volume (SOL)")
+            fig.update_layout(showlegend=False)
+            st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
+
         st.markdown("""
         <div class="insight-grid">
             <div class="insight">
-                <div class="tag">ANALYSIS 1</div>
-                <h4>Fee by Curve Stage</h4>
-                <p>Breaks down volume and fee revenue at each stage of the bonding curve:
-                Early (0-5 SOL) → Growth → Mid → Late → Near-Graduation → Post-Graduation.</p>
+                <div class="tag">RECOMMENDATION</div>
+                <h4>Variable Fee Design</h4>
+                <p>The data suggests a <strong>concave fee curve</strong> — start moderate (not high) to avoid
+                killing early momentum, peak at mid-curve where conviction is building, then taper to retain
+                graduated tokens in the PumpSwap ecosystem.</p>
             </div>
             <div class="insight">
-                <div class="tag">ANALYSIS 2</div>
-                <h4>Variable Fee Models</h4>
-                <p>Compares 4 fee structures: Flat 1% (current), Growth-Optimized (2%→0.5%),
-                Retention-Optimized (0.5%→2%), and Ascend-Style Sliding.</p>
+                <div class="tag">CREATOR ALIGNMENT</div>
+                <h4>Fee Sharing Matters</h4>
+                <p>Tokens with creator fees in the <strong>0.5-2% range</strong> show healthier trading patterns.
+                Too low = no creator incentive to promote. Too high = deters traders.
+                The sweet spot balances <strong>creator revenue with trader friction</strong>.</p>
             </div>
             <div class="insight">
-                <div class="tag">ANALYSIS 3</div>
-                <h4>Fee vs Token Survival</h4>
-                <p>Correlates creator fee levels with token lifespan and volume to find
-                the optimal fee range that maximizes both creator income and trading activity.</p>
+                <div class="tag">NEXT STEPS</div>
+                <h4>A/B Testing Framework</h4>
+                <p>Deploy 2-3 fee curves simultaneously on new token launches, measure graduation rate,
+                30-day volume retention, and creator engagement. Use <strong>causal inference</strong>
+                (not just correlation) to identify the optimal fee function.</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -1141,7 +1130,7 @@ with tab4:
             fig.update_xaxes(title_text="% of Tokens", ticksuffix="%")
             st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption("Connect Dune API for live data")
+            st.caption("Loading data...")
 
     with c2:
         st.markdown('<div class="chart-card"><h4>Bonding Curve Progress</h4></div>', unsafe_allow_html=True)
@@ -1158,7 +1147,7 @@ with tab4:
             fig.update_yaxes(title_text="% of Tokens", ticksuffix="%")
             st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption("Connect Dune API for live data")
+            st.caption("Loading data...")
 
     # Health insights
     if not sv.empty and not bc.empty:
@@ -1196,26 +1185,20 @@ with tab5:
     c1, c2 = st.columns(2)
     with c1:
         st.markdown('<div class="chart-card"><h4>Top Traders by PnL (7d)</h4></div>', unsafe_allow_html=True)
-        if DUNE_API_KEY:
-            pnl = load("top_traders_pnl")
-            if not pnl.empty:
-                pnl["trader"] = pnl["trader"].apply(shorten)
-                st.dataframe(pnl, use_container_width=True, hide_index=True, height=500)
-        else:
-            st.caption("Connect Dune API for live data")
+        pnl = load("top_traders_pnl")
+        if not pnl.empty:
+            pnl["trader"] = pnl["trader"].apply(shorten)
+            st.dataframe(pnl, use_container_width=True, hide_index=True, height=500)
 
     with c2:
         st.markdown('<div class="chart-card"><h4>Whale Tracker (7d)</h4></div>', unsafe_allow_html=True)
-        if DUNE_API_KEY:
-            wh = load("whale_tracker")
-            if not wh.empty:
-                wh["trader"] = wh["trader"].apply(shorten)
-                st.dataframe(wh, use_container_width=True, hide_index=True, height=500)
-        else:
-            st.caption("Connect Dune API for live data")
+        wh = load("whale_tracker")
+        if not wh.empty:
+            wh["trader"] = wh["trader"].apply(shorten)
+            st.dataframe(wh, use_container_width=True, hide_index=True, height=500)
 
     # PnL Distribution visualization
-    if DUNE_API_KEY and "pnl" in dir() and not pnl.empty:
+    if "pnl" in dir() and not pnl.empty:
         st.markdown('<div class="chart-card"><h4>PnL Distribution - Top 20 Traders</h4></div>', unsafe_allow_html=True)
         fig = go.Figure(go.Bar(
             x=pnl["trader"], y=pnl["pnl"],
@@ -1236,62 +1219,57 @@ with tab6:
         'Top 7 bots control 92.6% of MEV extraction.</div>',
         unsafe_allow_html=True)
 
-    if DUNE_API_KEY:
-        sw = load("sandwich_detection")
-        if not sw.empty:
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown('<div class="chart-card"><h4>Daily Sandwich Attacks</h4></div>', unsafe_allow_html=True)
-                fig = go.Figure(go.Bar(x=sw["day"], y=sw["attacks"],
-                    marker=dict(color=sw["attacks"],
-                        colorscale=[[0, "rgba(239,68,68,0.3)"], [1, RED]]),
-                    hovertemplate="%{x|%b %d}: <b>%{y:,.0f}</b> attacks<extra></extra>"))
-                fig.update_traces(marker_line_width=0)
-                st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
+    sw = load("sandwich_detection")
+    if not sw.empty:
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown('<div class="chart-card"><h4>Daily Sandwich Attacks</h4></div>', unsafe_allow_html=True)
+            fig = go.Figure(go.Bar(x=sw["day"], y=sw["attacks"],
+                marker=dict(color=sw["attacks"],
+                    colorscale=[[0, "rgba(239,68,68,0.3)"], [1, RED]]),
+                hovertemplate="%{x|%b %d}: <b>%{y:,.0f}</b> attacks<extra></extra>"))
+            fig.update_traces(marker_line_width=0)
+            st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
 
-            with c2:
-                st.markdown('<div class="chart-card"><h4>Unique MEV Bots</h4></div>', unsafe_allow_html=True)
-                fig = go.Figure(go.Scatter(x=sw["day"], y=sw["bots"],
-                    fill="tozeroy", fillcolor="rgba(249,115,22,0.06)",
-                    line=dict(color=ORANGE, width=2.5), mode="lines+markers",
-                    marker=dict(size=5),
-                    hovertemplate="%{x|%b %d}: <b>%{y}</b> bots<extra></extra>"))
-                st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
+        with c2:
+            st.markdown('<div class="chart-card"><h4>Unique MEV Bots</h4></div>', unsafe_allow_html=True)
+            fig = go.Figure(go.Scatter(x=sw["day"], y=sw["bots"],
+                fill="tozeroy", fillcolor="rgba(249,115,22,0.06)",
+                line=dict(color=ORANGE, width=2.5), mode="lines+markers",
+                marker=dict(size=5),
+                hovertemplate="%{x|%b %d}: <b>%{y}</b> bots<extra></extra>"))
+            st.plotly_chart(apply_chart(fig), use_container_width=True, config={"displayModeBar": False})
 
-            # Sandwich KPIs
-            sc1, sc2, sc3 = st.columns(3)
-            with sc1:
-                st.metric("Total Attacks", f"{sw['attacks'].sum():,.0f}")
-            with sc2:
-                st.metric("Avg Daily Attacks", f"{sw['attacks'].mean():,.0f}")
-            with sc3:
-                st.metric("Peak Bots (single day)", f"{sw['bots'].max():,.0f}")
-        else:
-            st.info("No sandwich attacks detected in this time range")
+        # Sandwich KPIs
+        sc1, sc2, sc3 = st.columns(3)
+        with sc1:
+            st.metric("Total Attacks", f"{sw['attacks'].sum():,.0f}")
+        with sc2:
+            st.metric("Avg Daily Attacks", f"{sw['attacks'].mean():,.0f}")
+        with sc3:
+            st.metric("Peak Bots (single day)", f"{sw['bots'].max():,.0f}")
 
-        # Bot Activity
-        st.markdown('<div class="chart-card"><h4>Bot Trading Activity</h4></div>', unsafe_allow_html=True)
-        bot = load("bot_activity", days)
-        if not bot.empty:
-            top_bots = bot.groupby("bot").agg(vol=("vol_usd", "sum"), tr=("trades", "sum")).sort_values("vol", ascending=False).head(8).reset_index()
-            c1, c2 = st.columns(2)
-            with c1:
-                fig = go.Figure(go.Bar(
-                    x=top_bots["bot"], y=top_bots["vol"],
-                    marker=dict(color=[f"rgba(124,58,237,{0.3+0.7*i/len(top_bots)})" for i in range(len(top_bots))]),
-                    hovertemplate="%{x}: <b>$%{y:,.0f}</b><extra></extra>"))
-                fig.update_yaxes(tickprefix="$")
-                st.plotly_chart(apply_chart(fig, 350), use_container_width=True, config={"displayModeBar": False})
+    # Bot Activity
+    st.markdown('<div class="chart-card"><h4>Bot Trading Activity</h4></div>', unsafe_allow_html=True)
+    bot = load("bot_activity", days)
+    if not bot.empty:
+        top_bots = bot.groupby("bot").agg(vol=("vol_usd", "sum"), tr=("trades", "sum")).sort_values("vol", ascending=False).head(8).reset_index()
+        c1, c2 = st.columns(2)
+        with c1:
+            fig = go.Figure(go.Bar(
+                x=top_bots["bot"], y=top_bots["vol"],
+                marker=dict(color=[f"rgba(124,58,237,{0.3+0.7*i/len(top_bots)})" for i in range(len(top_bots))]),
+                hovertemplate="%{x}: <b>$%{y:,.0f}</b><extra></extra>"))
+            fig.update_yaxes(tickprefix="$")
+            st.plotly_chart(apply_chart(fig, 350), use_container_width=True, config={"displayModeBar": False})
 
-            with c2:
-                top5 = top_bots["bot"].head(5).tolist()
-                bd = bot[bot["bot"].isin(top5)]
-                fig = px.line(bd, x="day", y="vol_usd", color="bot",
-                    color_discrete_sequence=[PURPLE, CYAN, GREEN, YELLOW, ORANGE])
-                fig.update_yaxes(tickprefix="$")
-                st.plotly_chart(apply_chart(fig, 350), use_container_width=True, config={"displayModeBar": False})
-    else:
-        st.info("Connect Dune API for live MEV analysis")
+        with c2:
+            top5 = top_bots["bot"].head(5).tolist()
+            bd = bot[bot["bot"].isin(top5)]
+            fig = px.line(bd, x="day", y="vol_usd", color="bot",
+                color_discrete_sequence=[PURPLE, CYAN, GREEN, YELLOW, ORANGE])
+            fig.update_yaxes(tickprefix="$")
+            st.plotly_chart(apply_chart(fig, 350), use_container_width=True, config={"displayModeBar": False})
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1299,7 +1277,7 @@ with tab6:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 st.markdown(f"""
 <div class="footer">
-    <p>Built by <strong>Ryan</strong> · Powered by
+    <p>Built by <strong>Ryan Holloway</strong> · Powered by
     <a href="https://dune.com" target="_blank">Dune Analytics</a> ·
     CoinGecko · DeFiLlama</p>
     <p class="sub">{datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')} ·
