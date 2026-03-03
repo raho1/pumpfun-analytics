@@ -34,7 +34,7 @@ export function TradingTab() {
 
   const pieData = useMemo(() => {
     if (!tradeSizeDist) return [];
-    return tradeSizeDist.map((d) => ({ name: d.bucket, value: d.pct_vol }));
+    return tradeSizeDist.map((d) => ({ name: d.bucket, value: Number(d.pct_vol) }));
   }, [tradeSizeDist]);
 
   return (

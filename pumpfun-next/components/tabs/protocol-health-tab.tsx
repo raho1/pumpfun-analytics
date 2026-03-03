@@ -1,15 +1,26 @@
 "use client";
 
+import { useMemo } from "react";
 import { useDuneQuery } from "@/hooks/use-dune-query";
 import { ChartCard } from "@/components/chart-card";
 import { SectionHeader } from "@/components/section-header";
 import { BarChartComponent } from "@/components/charts/bar-chart";
-import { COLORS, CHART_COLORS } from "@/lib/colors";
+import { CHART_COLORS } from "@/lib/colors";
 import type { TokenSurvival, BondingCurve } from "@/lib/types";
 
 export function ProtocolHealthTab() {
-  const { data: survival, isLoading: l1 } = useDuneQuery<TokenSurvival[]>("token_survival");
-  const { data: bonding, isLoading: l2 } = useDuneQuery<BondingCurve[]>("bonding_curve");
+  const { data: survivalRaw, isLoading: l1 } = useDuneQuery<TokenSurvival[]>("token_survival");
+  const { data: bondingRaw, isLoading: l2 } = useDuneQuery<BondingCurve[]>("bonding_curve");
+
+  const survival = useMemo(() => {
+    if (!survivalRaw) return undefined;
+    return survivalRaw.map((r) => ({ ...r, pct: Number(r.pct), cnt: Number(r.cnt) }));
+  }, [survivalRaw]);
+
+  const bonding = useMemo(() => {
+    if (!bondingRaw) return undefined;
+    return bondingRaw.map((r) => ({ ...r, pct: Number(r.pct), cnt: Number(r.cnt) }));
+  }, [bondingRaw]);
 
   return (
     <div>
@@ -50,26 +61,23 @@ export function ProtocolHealthTab() {
       {survival && survival.length > 0 && bonding && bonding.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
           <div className="insight-card">
-            <div className="text-[10px] font-bold tracking-[1.5px] uppercase text-purple mb-2">MORTALITY</div>
-            <h4 className="text-[#e8e8f0] text-[0.95rem] font-semibold mb-1.5">Token Lifespan</h4>
-            <p className="text-[#6b6b88] text-[0.8rem] leading-[1.6]">
-              <strong className="text-purple-light">{survival[0]?.pct?.toFixed(0)}%</strong> of tokens die within 5 minutes.
-              Only <strong className="text-purple-light">{survival[survival.length - 1]?.pct?.toFixed(1)}%</strong> survive beyond 3 days.
+            <div className="text-[0.65rem] font-semibold tracking-[1px] uppercase text-[#7c3aed] mb-1.5">Mortality</div>
+            <p className="text-[0.78rem] text-[#6b6b88] leading-[1.55]">
+              <strong className="text-[#a78bfa]">{survival[0]?.pct?.toFixed(0)}%</strong> of tokens die within 5 minutes.
+              Only <strong className="text-[#a78bfa]">{survival[survival.length - 1]?.pct?.toFixed(1)}%</strong> survive beyond 3 days.
             </p>
           </div>
           <div className="insight-card">
-            <div className="text-[10px] font-bold tracking-[1.5px] uppercase text-purple mb-2">BONDING CURVE</div>
-            <h4 className="text-[#e8e8f0] text-[0.95rem] font-semibold mb-1.5">Reserve Distribution</h4>
-            <p className="text-[#6b6b88] text-[0.8rem] leading-[1.6]">
-              <strong className="text-purple-light">{bonding[0]?.pct?.toFixed(0)}%</strong> never reach 1 SOL in reserves.
-              Only <strong className="text-purple-light">{bonding[bonding.length - 1]?.pct?.toFixed(1)}%</strong> graduate (79+ SOL).
+            <div className="text-[0.65rem] font-semibold tracking-[1px] uppercase text-[#7c3aed] mb-1.5">Bonding Curve</div>
+            <p className="text-[0.78rem] text-[#6b6b88] leading-[1.55]">
+              <strong className="text-[#a78bfa]">{bonding[0]?.pct?.toFixed(0)}%</strong> never reach 1 SOL in reserves.
+              Only <strong className="text-[#a78bfa]">{bonding[bonding.length - 1]?.pct?.toFixed(1)}%</strong> graduate (79+ SOL).
             </p>
           </div>
           <div className="insight-card">
-            <div className="text-[10px] font-bold tracking-[1.5px] uppercase text-purple mb-2">IMPLICATION</div>
-            <h4 className="text-[#e8e8f0] text-[0.95rem] font-semibold mb-1.5">Quality Signal</h4>
-            <p className="text-[#6b6b88] text-[0.8rem] leading-[1.6]">
-              Tokens surviving 24+ hours are in the <strong className="text-purple-light">top ~8%</strong> by longevity,
+            <div className="text-[0.65rem] font-semibold tracking-[1px] uppercase text-[#7c3aed] mb-1.5">Implication</div>
+            <p className="text-[0.78rem] text-[#6b6b88] leading-[1.55]">
+              Tokens surviving 24+ hours are in the <strong className="text-[#a78bfa]">top ~8%</strong> by longevity,
               making survival a meaningful quality filter.
             </p>
           </div>

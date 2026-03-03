@@ -20,12 +20,12 @@ import type { DailyVolume, DailyLaunches, GraduationRate, FeeRevenue } from "@/l
 
 const TABS = [
   { key: "overview", label: "Core Activity" },
-  { key: "trading", label: "Trading Dynamics" },
-  { key: "revenue", label: "Revenue & Fees" },
-  { key: "fee-lab", label: "Fee Optimization Lab" },
-  { key: "health", label: "Protocol Health" },
-  { key: "traders", label: "Trader Intelligence" },
-  { key: "mev", label: "MEV & Sandwich" },
+  { key: "trading", label: "Trading" },
+  { key: "revenue", label: "Revenue" },
+  { key: "fee-lab", label: "Fee Lab" },
+  { key: "health", label: "Health" },
+  { key: "traders", label: "Traders" },
+  { key: "mev", label: "MEV" },
 ];
 
 export default function Home() {
@@ -58,28 +58,32 @@ export default function Home() {
       ? formatCompact(feeRevenue.reduce((s, r) => s + r.total_fees, 0) / feeRevenue.length)
       : "~13K";
 
-    const solPrice = sol.price ? `$${sol.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "—";
-
     return [
-      { icon: "\u{1F680}", value: avgLaunches, label: "Avg Daily Launches" },
-      { icon: "\u{1F48E}", value: avgVol, label: "Avg Daily Vol (SOL)" },
-      { icon: "\u{1F393}", value: avgGrad, label: "Graduation Rate", glow: "purple" as const },
-      { icon: "\u{1F465}", value: avgTraders, label: "Avg Daily Traders" },
-      { icon: "\u{1F4B0}", value: avgFees, label: "Avg Daily Fees (SOL)" },
-      { icon: "\u25CE", value: solPrice, label: "SOL Price", glow: "cyan" as const, delta: sol.change_24h || undefined },
+      { value: avgLaunches, label: "Daily Launches" },
+      { value: avgVol, label: "Daily Volume (SOL)" },
+      { value: avgGrad, label: "Graduation Rate", accent: "#a78bfa" },
+      { value: avgTraders, label: "Daily Traders" },
+      { value: avgFees, label: "Daily Fees (SOL)" },
+      {
+        value: sol.price ? `$${sol.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "—",
+        label: "SOL Price",
+        accent: "#06b6d4",
+        delta: sol.change_24h || undefined,
+      },
     ];
   }, [volume, launches, gradRate, feeRevenue, sol]);
 
   return (
-    <main className="max-w-[1400px] mx-auto px-4 pb-8">
+    <main className="max-w-[1360px] mx-auto px-4 pb-8">
       <Hero />
       <KPIRow items={kpis} />
-      <ExecutiveBriefing />
 
-      <div className="border-t border-[rgba(255,255,255,0.04)] my-6" />
+      <div className="mt-8 mb-5">
+        <ExecutiveBriefing />
+      </div>
 
       {/* Tabs */}
-      <div className="tab-list mb-6">
+      <div className="tab-list mb-5">
         {TABS.map((tab) => (
           <button
             key={tab.key}

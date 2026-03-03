@@ -32,20 +32,20 @@ export interface FeeRevenue {
 
 export interface TradeSizeDist {
   bucket: string;
-  pct_vol: number;
+  pct_vol: number | string;
   cnt: number;
 }
 
 export interface TokenSurvival {
   bucket: string;
-  pct: number;
-  cnt: number;
+  pct: number | string;
+  cnt: number | string;
 }
 
 export interface BondingCurve {
   bucket: string;
-  pct: number;
-  cnt: number;
+  pct: number | string;
+  cnt: number | string;
 }
 
 export interface HourlyPattern {

@@ -104,10 +104,11 @@ export function RevenueTab() {
           <DataTable
             data={creators}
             columns={[
-              { key: "creator", label: "Creator", format: "address" },
-              { key: "tokens_created", label: "Tokens", format: "number", align: "right" },
-              { key: "total_creator_fees_sol", label: "Fees (SOL)", format: "sol", align: "right" },
-              { key: "total_volume_sol", label: "Volume (SOL)", format: "sol", align: "right" },
+              { key: "name", label: "Token" },
+              { key: "symbol", label: "Symbol" },
+              { key: "fees_sol", label: "Fees (SOL)", format: "sol", align: "right" },
+              { key: "vol_sol", label: "Volume (SOL)", format: "sol", align: "right" },
+              { key: "trades", label: "Trades", format: "number", align: "right" },
             ]}
           />
         )}
