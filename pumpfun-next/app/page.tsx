@@ -3,8 +3,8 @@
 import { useState, useMemo } from "react";
 import { Hero } from "@/components/hero";
 import { KPIRow } from "@/components/kpi-row";
-import { ExecutiveBriefing } from "@/components/executive-briefing";
 import { Footer } from "@/components/footer";
+import { AnalysisTab } from "@/components/tabs/analysis-tab";
 import { OverviewTab } from "@/components/tabs/overview-tab";
 import { TradingTab } from "@/components/tabs/trading-tab";
 import { RevenueTab } from "@/components/tabs/revenue-tab";
@@ -26,6 +26,7 @@ const TABS = [
   { key: "health", label: "Health" },
   { key: "traders", label: "Traders" },
   { key: "mev", label: "MEV" },
+  { key: "analysis", label: "Analysis" },
 ];
 
 export default function Home() {
@@ -78,10 +79,6 @@ export default function Home() {
       <Hero />
       <KPIRow items={kpis} />
 
-      <div className="mt-8 mb-5">
-        <ExecutiveBriefing />
-      </div>
-
       {/* Tabs */}
       <div className="tab-list mb-5">
         {TABS.map((tab) => (
@@ -105,6 +102,7 @@ export default function Home() {
         {activeTab === "health" && <ProtocolHealthTab />}
         {activeTab === "traders" && <TraderTab />}
         {activeTab === "mev" && <MEVTab />}
+        {activeTab === "analysis" && <AnalysisTab />}
       </div>
 
       <Footer />
