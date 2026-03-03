@@ -28,9 +28,10 @@ export function TraderTab() {
               columns={[
                 { key: "trader", label: "Trader", format: "address" },
                 { key: "pnl", label: "PnL (SOL)", format: "sol", align: "right" },
-                { key: "buys", label: "Buys", format: "number", align: "right" },
-                { key: "sells", label: "Sells", format: "number", align: "right" },
-                { key: "volume_sol", label: "Volume", format: "sol", align: "right" },
+                { key: "roi", label: "ROI %", format: "percent", align: "right" },
+                { key: "spent", label: "Spent", format: "sol", align: "right" },
+                { key: "received", label: "Received", format: "sol", align: "right" },
+                { key: "tokens", label: "Tokens", format: "number", align: "right" },
               ]}
             />
           )}
@@ -42,9 +43,10 @@ export function TraderTab() {
               data={whales}
               columns={[
                 { key: "trader", label: "Trader", format: "address" },
-                { key: "volume_sol", label: "Volume (SOL)", format: "sol", align: "right" },
+                { key: "volume", label: "Volume (SOL)", format: "sol", align: "right" },
+                { key: "pnl", label: "PnL (SOL)", format: "sol", align: "right" },
+                { key: "tokens", label: "Tokens", format: "number", align: "right" },
                 { key: "trades", label: "Trades", format: "number", align: "right" },
-                { key: "tokens_traded", label: "Tokens", format: "number", align: "right" },
               ]}
             />
           )}
