@@ -1,9 +1,24 @@
 "use client";
 
-import { useSolPrice } from "@/hooks/use-sol-price";
+import { useCurrency, type CurrencyType } from "@/lib/currency-context";
+
+const CURRENCIES: CurrencyType[] = ["SOL", "USD", "PUMP"];
 
 export function Hero() {
-  const { sol } = useSolPrice();
+  const { currency, setCurrency, sol, pump } = useCurrency();
+
+  const activePrice = currency === "PUMP"
+    ? pump.price
+    : sol.price;
+
+  const activeChange = currency === "PUMP"
+    ? pump.change_24h
+    : sol.change_24h;
+
+  const priceLabel = currency === "PUMP" ? "PUMP" : "SOL";
+  const priceDisplay = currency === "PUMP"
+    ? `$${activePrice.toFixed(5)}`
+    : `$${activePrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
   return (
     <div className="relative pt-10 pb-6 -mx-4 overflow-hidden">
@@ -44,23 +59,44 @@ export function Hero() {
           </p>
         </div>
 
-        {/* SOL Price — right aligned */}
-        {sol.price && (
-          <div className="hidden sm:flex items-center gap-3 flex-shrink-0 mt-6 px-4 py-2.5 rounded-xl bg-[rgba(255,255,255,0.025)] border border-[rgba(255,255,255,0.05)]">
-            <span className="text-[0.65rem] font-semibold text-[#44445a] uppercase tracking-wider">SOL</span>
-            <span className="text-[1.05rem] font-bold text-white font-mono">
-              ${sol.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-            </span>
-            {sol.change_24h != null && (
-              <span
-                className="text-[0.7rem] font-semibold font-mono"
-                style={{ color: sol.change_24h >= 0 ? "#22c55e" : "#ef4444" }}
-              >
-                {sol.change_24h >= 0 ? "\u2191" : "\u2193"} {Math.abs(sol.change_24h).toFixed(1)}%
+        {/* Price pill + Currency toggle — right aligned */}
+        <div className="hidden sm:flex flex-col items-end gap-2.5 flex-shrink-0 mt-6">
+          {/* Price display */}
+          {activePrice > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-[rgba(255,255,255,0.025)] border border-[rgba(255,255,255,0.05)]">
+              <span className="text-[0.65rem] font-semibold text-[#44445a] uppercase tracking-wider">{priceLabel}</span>
+              <span className="text-[1.05rem] font-bold text-white font-mono">
+                {priceDisplay}
               </span>
-            )}
+              {activeChange != null && (
+                <span
+                  className="text-[0.7rem] font-semibold font-mono"
+                  style={{ color: activeChange >= 0 ? "#22c55e" : "#ef4444" }}
+                >
+                  {activeChange >= 0 ? "\u2191" : "\u2193"} {Math.abs(activeChange).toFixed(1)}%
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Currency toggle */}
+          <div className="flex rounded-lg overflow-hidden border border-[rgba(255,255,255,0.06)]">
+            {CURRENCIES.map((c) => (
+              <button
+                key={c}
+                onClick={() => setCurrency(c)}
+                className="px-3 py-1.5 text-[0.65rem] font-semibold tracking-wider uppercase transition-all duration-150"
+                style={{
+                  background: currency === c ? "rgba(124,58,237,0.08)" : "transparent",
+                  color: currency === c ? "#e4e4ec" : "#44445a",
+                  borderRight: c !== "PUMP" ? "1px solid rgba(255,255,255,0.06)" : "none",
+                }}
+              >
+                {c}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

@@ -31,6 +31,32 @@ export function shortenAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
+export type CurrencyType = "SOL" | "USD" | "PUMP";
+
+export function formatCurrency(val: number, currency: CurrencyType): string {
+  if (currency === "USD") {
+    if (val >= 1_000_000_000_000) return `$${(val / 1_000_000_000_000).toFixed(1)}T`;
+    if (val >= 1_000_000_000) return `$${(val / 1_000_000_000).toFixed(1)}B`;
+    if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(1)}M`;
+    if (val >= 1_000) return `$${(val / 1_000).toFixed(1)}K`;
+    if (val >= 1) return `$${val.toFixed(0)}`;
+    return `$${val.toFixed(2)}`;
+  }
+  if (currency === "PUMP") {
+    if (val >= 1_000_000_000_000) return `${(val / 1_000_000_000_000).toFixed(1)}T PUMP`;
+    if (val >= 1_000_000_000) return `${(val / 1_000_000_000).toFixed(1)}B PUMP`;
+    if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M PUMP`;
+    if (val >= 1_000) return `${(val / 1_000).toFixed(1)}K PUMP`;
+    return `${val.toLocaleString(undefined, { maximumFractionDigits: 0 })} PUMP`;
+  }
+  // SOL
+  if (val >= 1_000_000_000) return `${(val / 1_000_000_000).toFixed(1)}B SOL`;
+  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M SOL`;
+  if (val >= 1_000) return `${(val / 1_000).toFixed(1)}K SOL`;
+  if (val >= 1) return `${val.toFixed(1)} SOL`;
+  return `${val.toFixed(4)} SOL`;
+}
+
 export function cn(...classes: (string | undefined | false | null)[]): string {
   return classes.filter(Boolean).join(" ");
 }

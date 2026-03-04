@@ -1,19 +1,20 @@
 "use client";
 
 import { useDuneQuery } from "@/hooks/use-dune-query";
-import { useSolPrice } from "@/hooks/use-sol-price";
+import { useCurrency } from "@/lib/currency-context";
 import { ChartCard } from "@/components/chart-card";
 import { SectionHeader } from "@/components/section-header";
 import { ComboChartComponent } from "@/components/charts/combo-chart";
 import { StackedBarChartComponent } from "@/components/charts/stacked-bar-chart";
 import { BarChartComponent } from "@/components/charts/bar-chart";
 import { COLORS, STAGE_COLORS } from "@/lib/colors";
-import { formatCompact } from "@/lib/utils";
+import { formatCompact, formatCurrency } from "@/lib/utils";
 import type { FeeVsSurvival, FeeCurveGranular } from "@/lib/types";
 
 export function FeeAnalyticsTab() {
   const { data: feeVsSurv, isLoading: l2 } = useDuneQuery<FeeVsSurvival[]>("fee_vs_survival");
   const { data: feeCurve, isLoading: l3 } = useDuneQuery<FeeCurveGranular[]>("fee_curve_granular");
+  const { currency, convert } = useCurrency();
 
   return (
     <div>
@@ -34,7 +35,7 @@ export function FeeAnalyticsTab() {
             lineName="Avg Creator Fee %"
             lineColor={COLORS.cyan}
             isDate={false}
-            barYFormatter={(v) => formatCompact(v)}
+            barYFormatter={(v) => formatCurrency(convert(v), currency)}
             lineYFormatter={(v) => `${v.toFixed(3)}%`}
             height={380}
           />
@@ -67,7 +68,7 @@ export function FeeAnalyticsTab() {
               color={COLORS.purple}
               gradient
               isDate={false}
-              yFormatter={(v) => `${v.toFixed(1)} SOL`}
+              yFormatter={(v) => formatCurrency(convert(v), currency)}
             />
           )}
         </ChartCard>

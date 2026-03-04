@@ -8,7 +8,8 @@ import { BarChartComponent } from "@/components/charts/bar-chart";
 import { MultiLineChartComponent } from "@/components/charts/multi-line-chart";
 import { AreaChartComponent } from "@/components/charts/area-chart";
 import { COLORS, CHART_COLORS } from "@/lib/colors";
-import { formatDate, formatCompact } from "@/lib/utils";
+import { formatDate, formatCompact, formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
 import type {
   CohortRetention,
   RevenueQuality,
@@ -33,6 +34,7 @@ export function DeepDivesTab() {
   const { data: revenueRaw, isLoading: l2 } = useDuneQuery<RevenueQuality[]>("revenue_quality");
   const { data: survivalRaw, isLoading: l3 } = useDuneQuery<PostGradSurvival[]>("post_grad_survival");
   const { data: velocityRaw, isLoading: l4 } = useDuneQuery<CurveVelocity[]>("curve_velocity");
+  const { currency, convert } = useCurrency();
 
   /* Cohort Retention — pivot into rows keyed by cohort_week */
   const cohortData = useMemo(() => {
@@ -239,7 +241,7 @@ export function DeepDivesTab() {
                 ARPU (7d avg)
               </div>
               <div className="text-[1.2rem] sm:text-[1.4rem] font-bold tracking-[-0.02em] leading-[1.2] font-mono" style={{ color: COLORS.cyan }}>
-                {revenueKPIs.avgArpu.toFixed(4)} SOL
+                {formatCurrency(convert(revenueKPIs.avgArpu), currency)}
               </div>
             </div>
             <div className="kpi-card">
@@ -266,7 +268,7 @@ export function DeepDivesTab() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <ChartCard
             title="Revenue Per User (ARPU)"
-            subtitle="SOL fees per unique daily trader"
+            subtitle="Fees per unique daily trader"
             isLoading={l2}
           >
             {revenue && revenue.length > 0 && (
@@ -275,7 +277,7 @@ export function DeepDivesTab() {
                 xKey="day"
                 yKey="arpu_sol"
                 color={COLORS.cyan}
-                yFormatter={(v) => `${v.toFixed(4)}`}
+                yFormatter={(v) => formatCurrency(convert(v), currency)}
               />
             )}
           </ChartCard>

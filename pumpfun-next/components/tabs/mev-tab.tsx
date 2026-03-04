@@ -9,13 +9,15 @@ import { AreaChartComponent } from "@/components/charts/area-chart";
 import { DonutChartComponent } from "@/components/charts/donut-chart";
 import { DataTable } from "@/components/charts/data-table";
 import { COLORS, CHART_COLORS } from "@/lib/colors";
-import { formatCompact } from "@/lib/utils";
+import { formatCompact, formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
 import type { SandwichDetection, BotActivity, MEVBotStrategy } from "@/lib/types";
 
 export function MEVTab() {
   const { data: sandwich, isLoading: l1 } = useDuneQuery<SandwichDetection[]>("sandwich_detection");
   const { data: bots, isLoading: l2 } = useDuneQuery<BotActivity[]>("bot_activity");
   const { data: botStrategies, isLoading: l3 } = useDuneQuery<MEVBotStrategy[]>("mev_bot_strategy");
+  const { currency, convertFromUSD } = useCurrency();
 
   const topBots = useMemo(() => {
     if (!bots || bots.length === 0) return [];
@@ -108,7 +110,7 @@ export function MEVTab() {
             isDate={false}
             color={COLORS.purple}
             gradient
-            yFormatter={(v) => `$${formatCompact(v)}`}
+            yFormatter={(v) => formatCurrency(convertFromUSD(v), currency)}
           />
         )}
       </ChartCard>
@@ -126,7 +128,7 @@ export function MEVTab() {
               <DonutChartComponent
                 data={strategyBreakdown}
                 colors={CHART_COLORS}
-                valueFormatter={(v) => `$${formatCompact(v)}`}
+                valueFormatter={(v) => formatCurrency(convertFromUSD(v), currency)}
               />
             )}
           </ChartCard>

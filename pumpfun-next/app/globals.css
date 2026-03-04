@@ -86,58 +86,55 @@ body {
   transform: translateY(-1px);
 }
 
-/* ── Tab bar ────────────────────────── */
-.tab-list-wrapper {
-  position: relative;
-}
-.tab-list-wrapper::before,
-.tab-list-wrapper::after {
-  content: "";
-  position: absolute;
+/* ── Tab bar — sticky with group labels ── */
+.tab-bar {
+  position: sticky;
   top: 0;
-  bottom: 0;
-  width: 40px;
-  pointer-events: none;
-  z-index: 2;
-  transition: opacity 0.2s;
-}
-.tab-list-wrapper::before {
-  left: 0;
-  background: linear-gradient(to right, var(--color-surface), transparent);
-  border-radius: 10px 0 0 10px;
-  opacity: 1;
-}
-.tab-list-wrapper::after {
-  right: 0;
-  background: linear-gradient(to left, var(--color-surface), transparent);
-  border-radius: 0 10px 10px 0;
-  opacity: 1;
-}
-.tab-list-wrapper[data-scroll-start="true"]::before { opacity: 0; }
-.tab-list-wrapper[data-scroll-end="true"]::after { opacity: 0; }
-
-.tab-list {
+  z-index: 20;
   display: flex;
-  gap: 2px;
-  background: var(--color-surface);
-  border-radius: 10px;
-  padding: 3px;
-  border: 1px solid var(--color-border);
+  gap: 6px;
+  padding: 10px 6px 8px;
+  margin-bottom: 20px;
+  background: rgba(7, 7, 13, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
-.tab-list::-webkit-scrollbar {
+.tab-bar::-webkit-scrollbar {
   display: none;
+}
+.tab-group {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.tab-group-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--color-text-dimmer);
+  padding-left: 6px;
+}
+.tab-group-buttons {
+  display: flex;
+  gap: 2px;
+  background: var(--color-surface);
+  border-radius: 8px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
 }
 .tab-trigger {
   background: transparent;
   border: none;
-  border-radius: 7px;
+  border-radius: 6px;
   color: var(--color-text-dim);
-  padding: 8px 14px;
+  padding: 7px 14px;
   font-weight: 500;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;

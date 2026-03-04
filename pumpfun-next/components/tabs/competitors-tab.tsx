@@ -10,7 +10,8 @@ import { DonutChartComponent } from "@/components/charts/donut-chart";
 import { AreaChartComponent } from "@/components/charts/area-chart";
 import { DataTable } from "@/components/charts/data-table";
 import { COLORS } from "@/lib/colors";
-import { formatCompact, formatUSD } from "@/lib/utils";
+import { formatCompact, formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
 import type {
   CompetitorDexShare,
   CompetitorLaunches,
@@ -39,6 +40,7 @@ export function CompetitorsTab() {
   const { data: dexShare, isLoading: l1 } = useDuneQuery<CompetitorDexShare[]>("competitor_dex_share");
   const { data: launches, isLoading: l2 } = useDuneQuery<CompetitorLaunches[]>("competitor_launches");
   const { data: gradRates, isLoading: l3 } = useDuneQuery<CompetitorGradRates[]>("competitor_grad_rates");
+  const { currency, convertFromUSD } = useCurrency();
 
   // --- DEX Market Share aggregations ---
   const avgShareByDex = useMemo(() => {
@@ -221,7 +223,7 @@ export function CompetitorsTab() {
               Total DEX Volume (30d)
             </div>
             <div className="text-lg font-bold text-white font-mono">
-              {formatUSD(dexKpis.totalVolume)}
+              {formatCurrency(convertFromUSD(dexKpis.totalVolume), currency)}
             </div>
           </div>
           <div className="kpi-card">
@@ -229,7 +231,7 @@ export function CompetitorsTab() {
               Avg Daily Volume
             </div>
             <div className="text-lg font-bold text-white font-mono">
-              {formatUSD(dexKpis.avgDailyVol)}
+              {formatCurrency(convertFromUSD(dexKpis.avgDailyVol), currency)}
             </div>
           </div>
         </div>
@@ -265,7 +267,7 @@ export function CompetitorsTab() {
             <DonutChartComponent
               data={avgShareByDex}
               colors={avgShareByDex.map((d) => DEX_COLORS[d.name] || "#3d3d52")}
-              valueFormatter={(v) => formatUSD(v)}
+              valueFormatter={(v) => formatCurrency(convertFromUSD(v), currency)}
             />
           )}
         </ChartCard>

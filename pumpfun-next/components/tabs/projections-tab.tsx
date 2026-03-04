@@ -17,7 +17,8 @@ import { useDuneQuery } from "@/hooks/use-dune-query";
 import { SectionHeader } from "@/components/section-header";
 import { ChartCard } from "@/components/chart-card";
 import { COLORS } from "@/lib/colors";
-import { formatCompact, formatPercent, formatDate, formatSOL } from "@/lib/utils";
+import { formatCompact, formatPercent, formatDate, formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
 import { buildForecast, exponentialMA, growthRate } from "@/lib/projections";
 import type {
   DailyLaunches,
@@ -226,6 +227,7 @@ function ForecastChart({
 }
 
 export function ProjectionsTab() {
+  const { currency, convert } = useCurrency();
   const { data: launchRaw, isLoading: loadLaunches } =
     useDuneQuery<DailyLaunches[]>("daily_launches");
   const { data: volRaw, isLoading: loadVol } =
@@ -433,13 +435,13 @@ export function ProjectionsTab() {
         />
         <KPI
           label="Proj. 30d Volume"
-          value={`${formatSOL(summaryKpis.volume)} SOL`}
+          value={formatCurrency(convert(summaryKpis.volume), currency)}
           sub={`R² = ${summaryKpis.volR2.toFixed(2)}`}
           accent={COLORS.green}
         />
         <KPI
           label="Proj. 30d Fees"
-          value={`${formatSOL(summaryKpis.fees)} SOL`}
+          value={formatCurrency(convert(summaryKpis.fees), currency)}
           sub={`R² = ${summaryKpis.feeR2.toFixed(2)}`}
           accent={COLORS.purple}
         />
@@ -486,9 +488,9 @@ export function ProjectionsTab() {
         </ChartCard>
 
         <ChartCard
-          title="Daily Volume (SOL) — 30d Forecast"
+          title="Daily Volume — 30d Forecast"
           subtitle="Trading volume trajectory with confidence band"
-          note={`R² = ${(volForecast?.regression.r2 ?? 0).toFixed(3)} · Slope: ${formatSOL(Math.abs(volForecast?.regression.slope ?? 0))} SOL/day trend`}
+          note={`R² = ${(volForecast?.regression.r2 ?? 0).toFixed(3)} · Slope: ${formatCurrency(convert(Math.abs(volForecast?.regression.slope ?? 0)), currency)}/day trend`}
           isLoading={isLoading}
         >
           {volData.length > 0 && (
@@ -500,7 +502,7 @@ export function ProjectionsTab() {
               lowerKey="lower"
               trendKey="trend"
               color={COLORS.green}
-              yFormatter={(v) => formatSOL(v)}
+              yFormatter={(v) => formatCurrency(convert(v), currency)}
               lastHistDate={lastHistDate}
             />
           )}
@@ -515,9 +517,9 @@ export function ProjectionsTab() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <ChartCard
-          title="Daily Fee Revenue (SOL) — 30d Forecast"
+          title="Daily Fee Revenue — 30d Forecast"
           subtitle="Protocol + creator fees combined"
-          note={`R² = ${(feeForecast?.regression.r2 ?? 0).toFixed(3)} · Projected 30d total: ${formatSOL(summaryKpis.fees)} SOL`}
+          note={`R² = ${(feeForecast?.regression.r2 ?? 0).toFixed(3)} · Projected 30d total: ${formatCurrency(convert(summaryKpis.fees), currency)}`}
           isLoading={isLoading}
         >
           {feeData.length > 0 && (
@@ -529,7 +531,7 @@ export function ProjectionsTab() {
               lowerKey="lower"
               trendKey="trend"
               color={COLORS.purple}
-              yFormatter={(v) => formatSOL(v)}
+              yFormatter={(v) => formatCurrency(convert(v), currency)}
               lastHistDate={lastHistDate}
             />
           )}

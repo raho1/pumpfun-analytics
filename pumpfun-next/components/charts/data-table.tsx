@@ -1,6 +1,7 @@
 "use client";
 
-import { shortenAddress } from "@/lib/utils";
+import { shortenAddress, formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
 
 interface Column {
   key: string;
@@ -15,27 +16,28 @@ interface DataTableProps {
   maxRows?: number;
 }
 
-function formatCell(value: unknown, format?: string): string {
-  if (value === null || value === undefined) return "—";
-  const num = Number(value);
-  switch (format) {
-    case "number":
-      return isNaN(num) ? String(value) : num.toLocaleString();
-    case "sol":
-      return isNaN(num) ? String(value) : `${num.toLocaleString(undefined, { maximumFractionDigits: 1 })} SOL`;
-    case "usd":
-      return isNaN(num) ? String(value) : `$${num.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-    case "percent":
-      return isNaN(num) ? String(value) : `${num.toFixed(1)}%`;
-    case "address":
-      return shortenAddress(String(value));
-    default:
-      return String(value);
-  }
-}
-
 export function DataTable({ data, columns, maxRows = 20 }: DataTableProps) {
+  const { currency, convert, convertFromUSD } = useCurrency();
   const rows = data.slice(0, maxRows);
+
+  function formatCell(value: unknown, format?: string): string {
+    if (value === null || value === undefined) return "—";
+    const num = Number(value);
+    switch (format) {
+      case "number":
+        return isNaN(num) ? String(value) : num.toLocaleString();
+      case "sol":
+        return isNaN(num) ? String(value) : formatCurrency(convert(num), currency);
+      case "usd":
+        return isNaN(num) ? String(value) : formatCurrency(convertFromUSD(num), currency);
+      case "percent":
+        return isNaN(num) ? String(value) : `${num.toFixed(1)}%`;
+      case "address":
+        return shortenAddress(String(value));
+      default:
+        return String(value);
+    }
+  }
 
   return (
     <div className="overflow-auto max-h-[500px] rounded-xl border border-[rgba(255,255,255,0.04)]">

@@ -5,6 +5,35 @@ interface KPIItem {
   label: string;
   delta?: number;
   accent?: string;
+  sparkData?: number[];
+}
+
+function Sparkline({ data, color = "rgba(124,58,237,0.5)" }: { data: number[]; color?: string }) {
+  if (data.length < 2) return null;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const w = 36;
+  const h = 14;
+  const points = data
+    .map((v, i) => {
+      const x = (i / (data.length - 1)) * w;
+      const y = h - ((v - min) / range) * h;
+      return `${x},${y}`;
+    })
+    .join(" ");
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="mt-1.5 opacity-60">
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 export function KPIRow({ items }: { items: KPIItem[] }) {
@@ -32,6 +61,9 @@ export function KPIRow({ items }: { items: KPIItem[] }) {
             >
               {item.delta >= 0 ? "\u2191" : "\u2193"} {Math.abs(item.delta).toFixed(1)}%
             </div>
+          )}
+          {item.sparkData && item.sparkData.length >= 2 && (
+            <Sparkline data={item.sparkData} color={item.accent ?? "rgba(124,58,237,0.5)"} />
           )}
         </div>
       ))}

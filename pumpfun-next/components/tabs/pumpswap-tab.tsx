@@ -10,7 +10,8 @@ import { MultiLineChartComponent } from "@/components/charts/multi-line-chart";
 import { BarChartComponent } from "@/components/charts/bar-chart";
 import { DataTable } from "@/components/charts/data-table";
 import { COLORS } from "@/lib/colors";
-import { formatCompact } from "@/lib/utils";
+import { formatCompact, formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
 import type {
   PumpSwapFees,
   MigrationFunnel,
@@ -23,6 +24,7 @@ export function PumpSwapTab() {
   const { data: funnel, isLoading: l2 } = useDuneQuery<MigrationFunnel[]>("migration_funnel");
   const { data: topPools, isLoading: l3 } = useDuneQuery<PumpSwapTopPool[]>("pumpswap_top_pools");
   const { data: liquidity, isLoading: l4 } = useDuneQuery<PumpSwapLiquidity[]>("pumpswap_liquidity");
+  const { currency, convert } = useCurrency();
 
   const kpis = useMemo(() => {
     if (!fees || fees.length === 0) return null;
@@ -76,15 +78,15 @@ export function PumpSwapTab() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
           <div className="kpi-card">
             <div className="text-[0.65rem] font-semibold text-[#44445a] uppercase tracking-wider mb-1">Total Volume</div>
-            <div className="text-lg font-bold text-white font-mono">{formatCompact(kpis.totalVol)} SOL</div>
+            <div className="text-lg font-bold text-white font-mono">{formatCurrency(convert(kpis.totalVol), currency)}</div>
           </div>
           <div className="kpi-card">
             <div className="text-[0.65rem] font-semibold text-[#44445a] uppercase tracking-wider mb-1">Avg Daily Vol</div>
-            <div className="text-lg font-bold text-white font-mono">{formatCompact(kpis.avgDailyVol)} SOL</div>
+            <div className="text-lg font-bold text-white font-mono">{formatCurrency(convert(kpis.avgDailyVol), currency)}</div>
           </div>
           <div className="kpi-card">
             <div className="text-[0.65rem] font-semibold text-[#44445a] uppercase tracking-wider mb-1">Total Fees</div>
-            <div className="text-lg font-bold text-white font-mono">{formatCompact(kpis.totalFees)} SOL</div>
+            <div className="text-lg font-bold text-white font-mono">{formatCurrency(convert(kpis.totalFees), currency)}</div>
           </div>
           <div className="kpi-card">
             <div className="text-[0.65rem] font-semibold text-[#44445a] uppercase tracking-wider mb-1">Total Trades</div>
@@ -110,7 +112,7 @@ export function PumpSwapTab() {
               xKey="day"
               yKey="volume_sol"
               color={COLORS.cyan}
-              yFormatter={(v) => `${formatCompact(v)} SOL`}
+              yFormatter={(v) => formatCurrency(convert(v), currency)}
             />
           )}
         </ChartCard>
@@ -129,7 +131,7 @@ export function PumpSwapTab() {
                 { key: "protocol_fees", name: "Protocol Fees", color: COLORS.purple },
                 { key: "creator_fees", name: "Creator Fees", color: COLORS.cyan },
               ]}
-              yFormatter={(v) => `${formatCompact(v)} SOL`}
+              yFormatter={(v) => formatCurrency(convert(v), currency)}
             />
           )}
         </ChartCard>
@@ -222,7 +224,7 @@ export function PumpSwapTab() {
                 yKey="sol_deposited"
                 color={COLORS.green}
                 gradient
-                yFormatter={(v) => `${formatCompact(v)} SOL`}
+                yFormatter={(v) => formatCurrency(convert(v), currency)}
               />
             )}
           </ChartCard>

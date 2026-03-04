@@ -9,7 +9,8 @@ import { AreaChartComponent } from "@/components/charts/area-chart";
 import { StackedBarChartComponent } from "@/components/charts/stacked-bar-chart";
 import { MultiAreaChartComponent } from "@/components/charts/multi-area-chart";
 import { COLORS } from "@/lib/colors";
-import { formatCompact, formatPercent } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
+import { formatCompact, formatPercent, formatCurrency } from "@/lib/utils";
 import type { DailyLaunches, DailyVolume, GraduationRate, NewVsReturning } from "@/lib/types";
 
 export function OverviewTab() {
@@ -17,6 +18,7 @@ export function OverviewTab() {
   const { data: volume, isLoading: loadingVolume } = useDuneQuery<DailyVolume[]>("daily_volume");
   const { data: gradRateRaw, isLoading: loadingGrad } = useDuneQuery<GraduationRate[]>("graduation_rate");
   const { data: newRet, isLoading: loadingNR } = useDuneQuery<NewVsReturning[]>("new_vs_returning");
+  const { currency, convert } = useCurrency();
 
   const gradRate = useMemo(() => {
     if (!gradRateRaw) return undefined;
@@ -68,16 +70,20 @@ export function OverviewTab() {
           )}
         </ChartCard>
 
-        <ChartCard title="Buy vs Sell Volume (SOL)" isLoading={loadingVolume}>
+        <ChartCard title="Buy vs Sell Volume" isLoading={loadingVolume}>
           {volume && volume.length > 0 && (
             <StackedBarChartComponent
-              data={volume}
+              data={volume.map((r) => ({
+                ...r,
+                buy_vol_c: convert(r.buy_vol || 0),
+                sell_vol_c: convert(r.sell_vol || 0),
+              }))}
               xKey="day"
               series={[
-                { key: "buy_vol", name: "Buy", color: COLORS.green },
-                { key: "sell_vol", name: "Sell", color: COLORS.red },
+                { key: "buy_vol_c", name: "Buy", color: COLORS.green },
+                { key: "sell_vol_c", name: "Sell", color: COLORS.red },
               ]}
-              yFormatter={(v) => formatCompact(v)}
+              yFormatter={(v) => formatCurrency(v, currency)}
             />
           )}
         </ChartCard>

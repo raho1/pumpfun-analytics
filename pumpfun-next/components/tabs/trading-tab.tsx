@@ -9,7 +9,8 @@ import { DonutChartComponent } from "@/components/charts/donut-chart";
 import { MultiAreaChartComponent } from "@/components/charts/multi-area-chart";
 import { ComboChartComponent } from "@/components/charts/combo-chart";
 import { COLORS } from "@/lib/colors";
-import { formatCompact } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
+import { formatCompact, formatCurrency } from "@/lib/utils";
 import type { DailyVolume, TradeSizeDist, PriceImpact, HourlyPattern } from "@/lib/types";
 
 export function TradingTab() {
@@ -17,6 +18,7 @@ export function TradingTab() {
   const { data: tradeSizeDist, isLoading: l2 } = useDuneQuery<TradeSizeDist[]>("trade_size_dist");
   const { data: priceImpact, isLoading: l3 } = useDuneQuery<PriceImpact[]>("price_impact");
   const { data: hourlyPattern, isLoading: l4 } = useDuneQuery<HourlyPattern[]>("hourly_pattern");
+  const { currency, convert } = useCurrency();
 
   const volumeWithMA = useMemo(() => {
     if (!volume || volume.length === 0) return [];
@@ -26,11 +28,12 @@ export function TradingTab() {
       const slice30 = sorted.slice(Math.max(0, i - 29), i + 1);
       return {
         ...row,
-        ma7: slice7.reduce((s, r) => s + (r.volume_sol || 0), 0) / slice7.length,
-        ma30: slice30.reduce((s, r) => s + (r.volume_sol || 0), 0) / slice30.length,
+        vol_c: convert(row.volume_sol || 0),
+        ma7: convert(slice7.reduce((s, r) => s + (r.volume_sol || 0), 0) / slice7.length),
+        ma30: convert(slice30.reduce((s, r) => s + (r.volume_sol || 0), 0) / slice30.length),
       };
     });
-  }, [volume]);
+  }, [volume, convert]);
 
   const pieData = useMemo(() => {
     if (!tradeSizeDist) return [];
@@ -51,11 +54,11 @@ export function TradingTab() {
               data={volumeWithMA}
               xKey="day"
               series={[
-                { key: "volume_sol", name: "Daily", color: "rgba(255,255,255,0.15)" },
+                { key: "vol_c", name: "Daily", color: "rgba(255,255,255,0.15)" },
                 { key: "ma7", name: "7d MA", color: COLORS.purple },
                 { key: "ma30", name: "30d MA", color: COLORS.orange, dash: "5 5" },
               ]}
-              yFormatter={(v) => formatCompact(v)}
+              yFormatter={(v) => formatCurrency(v, currency)}
             />
           )}
         </ChartCard>
@@ -96,7 +99,7 @@ export function TradingTab() {
               lineName="Traders"
               lineColor={COLORS.cyan}
               isDate={false}
-              barYFormatter={(v) => formatCompact(v)}
+              barYFormatter={(v) => formatCurrency(convert(v), currency)}
               lineYFormatter={(v) => formatCompact(v)}
             />
           )}

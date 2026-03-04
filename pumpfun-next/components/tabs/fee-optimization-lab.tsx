@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useDuneQuery } from "@/hooks/use-dune-query";
-import { useSolPrice } from "@/hooks/use-sol-price";
+import { useCurrency } from "@/lib/currency-context";
 import { ChartCard } from "@/components/chart-card";
 import { SectionHeader } from "@/components/section-header";
 import { StackedBarChartComponent } from "@/components/charts/stacked-bar-chart";
@@ -10,7 +10,7 @@ import { MultiLineChartComponent } from "@/components/charts/multi-line-chart";
 import { BarChartComponent } from "@/components/charts/bar-chart";
 import { DonutChartComponent } from "@/components/charts/donut-chart";
 import { COLORS, STAGE_COLORS, CHART_COLORS } from "@/lib/colors";
-import { formatCompact, formatSOL, formatUSD, formatPercent } from "@/lib/utils";
+import { formatCompact, formatCurrency, formatPercent } from "@/lib/utils";
 import type { FeeByCurveStage, VariableFeeModel, FeeCurveGranular, FeeVsSurvival } from "@/lib/types";
 
 const PRESET_RATES: Record<string, number[]> = {
@@ -74,7 +74,7 @@ export function FeeOptimizationLab() {
   const { data: vfm, isLoading: l2 } = useDuneQuery<VariableFeeModel[]>("variable_fee_model");
   const { data: feeCurve, isLoading: l3 } = useDuneQuery<FeeCurveGranular[]>("fee_curve_granular");
   const { data: feeVsSurv, isLoading: l4 } = useDuneQuery<FeeVsSurvival[]>("fee_vs_survival");
-  const { sol } = useSolPrice();
+  const { currency, convert } = useCurrency();
 
   const [preset, setPreset] = useState("Custom");
   const [rates, setRates] = useState<number[]>(PRESET_RATES["Ascend-Style Sliding"]);
@@ -138,8 +138,6 @@ export function FeeOptimizationLab() {
       creatorDeltaPct: currentCreatorTotal > 0 ? ((customCreatorTotal - currentCreatorTotal) / currentCreatorTotal) * 100 : 0,
     };
   }, [feeStage, rates]);
-
-  const sp = sol.price || 1;
 
   return (
     <div>
@@ -208,25 +206,23 @@ export function FeeOptimizationLab() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
                 <div className="kpi-card">
                   <div className="text-[0.65rem] font-semibold text-[#44445a] uppercase tracking-wider mb-1">Your Model Revenue</div>
-                  <div className="text-lg font-bold text-white">{formatSOL(simulation.totalCustom)} SOL</div>
-                  <div className="text-xs text-[#55556a]">{formatUSD(simulation.totalCustom * sp)}</div>
+                  <div className="text-lg font-bold text-white">{formatCurrency(convert(simulation.totalCustom), currency)}</div>
                 </div>
                 <div className="kpi-card">
                   <div className="text-[0.65rem] font-semibold text-[#44445a] uppercase tracking-wider mb-1">vs Current</div>
                   <div className={`text-lg font-bold ${simulation.totalDelta >= 0 ? "text-green" : "text-red"}`}>
-                    {simulation.totalDelta >= 0 ? "+" : ""}{formatSOL(simulation.totalDelta)} SOL
+                    {simulation.totalDelta >= 0 ? "+" : ""}{formatCurrency(convert(simulation.totalDelta), currency)}
                   </div>
                   <div className="text-xs text-[#55556a]">{simulation.deltaPct >= 0 ? "+" : ""}{simulation.deltaPct.toFixed(1)}%</div>
                 </div>
                 <div className="kpi-card">
                   <div className="text-[0.65rem] font-semibold text-[#44445a] uppercase tracking-wider mb-1">Creator Payout</div>
-                  <div className="text-lg font-bold text-white">{formatSOL(simulation.customCreatorTotal)} SOL</div>
-                  <div className="text-xs text-[#55556a]">{formatUSD(simulation.customCreatorTotal * sp)}</div>
+                  <div className="text-lg font-bold text-white">{formatCurrency(convert(simulation.customCreatorTotal), currency)}</div>
                 </div>
                 <div className="kpi-card">
                   <div className="text-[0.65rem] font-semibold text-[#44445a] uppercase tracking-wider mb-1">Creator vs Current</div>
                   <div className={`text-lg font-bold ${simulation.creatorDelta >= 0 ? "text-green" : "text-red"}`}>
-                    {simulation.creatorDelta >= 0 ? "+" : ""}{formatSOL(simulation.creatorDelta)} SOL
+                    {simulation.creatorDelta >= 0 ? "+" : ""}{formatCurrency(convert(simulation.creatorDelta), currency)}
                   </div>
                   <div className="text-xs text-[#55556a]">{simulation.creatorDeltaPct >= 0 ? "+" : ""}{simulation.creatorDeltaPct.toFixed(1)}%</div>
                 </div>
@@ -247,7 +243,7 @@ export function FeeOptimizationLab() {
                   ]}
                   grouped
                   isDate={false}
-                  yFormatter={(v) => `${formatCompact(v)} SOL`}
+                  yFormatter={(v) => formatCurrency(convert(v), currency)}
                   height={380}
                 />
               </ChartCard>
@@ -301,7 +297,7 @@ export function FeeOptimizationLab() {
                   yKey="total_fee_sol"
                   isDate={false}
                   colors={[COLORS.purple, COLORS.green, COLORS.orange, COLORS.cyan]}
-                  yFormatter={(v) => `${formatCompact(v)} SOL`}
+                  yFormatter={(v) => formatCurrency(convert(v), currency)}
                   height={380}
                 />
               </ChartCard>
@@ -309,7 +305,7 @@ export function FeeOptimizationLab() {
           )}
 
           {/* ═══════ A/B TEST BACKTESTING ═══════ */}
-          <ABTestSection feeStage={feeStage} stageNames={stageNames} sp={sp} />
+          <ABTestSection feeStage={feeStage} stageNames={stageNames} />
 
           {/* Evidence base */}
           <div className="border-t border-[rgba(255,255,255,0.04)] my-6" />
@@ -443,12 +439,11 @@ function VariantConfig({
 function ABTestSection({
   feeStage,
   stageNames,
-  sp,
 }: {
   feeStage: FeeByCurveStage[];
   stageNames: string[];
-  sp: number;
 }) {
+  const { currency, convert } = useCurrency();
   const [presetA, setPresetA] = useState("Flat 1% (Control)");
   const [presetB, setPresetB] = useState("Ascend-Style");
   const [ratesA, setRatesA] = useState<number[]>([...AB_PRESETS["Flat 1% (Control)"]]);
@@ -586,10 +581,7 @@ function ABTestSection({
             A: Total Revenue
           </div>
           <div className="text-[1rem] font-bold" style={{ color: varAColor }}>
-            {formatSOL(simA.totalRevenue)} SOL
-          </div>
-          <div className="text-[0.6rem] text-[#44445a]">
-            {formatUSD(simA.totalRevenue * sp)}
+            {formatCurrency(convert(simA.totalRevenue), currency)}
           </div>
         </div>
         <div className="kpi-card">
@@ -597,10 +589,7 @@ function ABTestSection({
             B: Total Revenue
           </div>
           <div className="text-[1rem] font-bold" style={{ color: varBColor }}>
-            {formatSOL(simB.totalRevenue)} SOL
-          </div>
-          <div className="text-[0.6rem] text-[#44445a]">
-            {formatUSD(simB.totalRevenue * sp)}
+            {formatCurrency(convert(simB.totalRevenue), currency)}
           </div>
         </div>
         <div className="kpi-card">
@@ -608,7 +597,7 @@ function ABTestSection({
             A: Creator Pay
           </div>
           <div className="text-[1rem] font-bold" style={{ color: varAColor }}>
-            {formatSOL(simA.totalCreator)} SOL
+            {formatCurrency(convert(simA.totalCreator), currency)}
           </div>
         </div>
         <div className="kpi-card">
@@ -616,7 +605,7 @@ function ABTestSection({
             B: Creator Pay
           </div>
           <div className="text-[1rem] font-bold" style={{ color: varBColor }}>
-            {formatSOL(simB.totalCreator)} SOL
+            {formatCurrency(convert(simB.totalCreator), currency)}
           </div>
         </div>
         <div className="kpi-card">
@@ -727,7 +716,7 @@ function ABTestSection({
             ]}
             grouped
             isDate={false}
-            yFormatter={(v) => `${formatCompact(v)} SOL`}
+            yFormatter={(v) => formatCurrency(convert(v), currency)}
             height={320}
           />
         </ChartCard>
@@ -801,20 +790,20 @@ function ABTestSection({
                       {stageA.rate.toFixed(2)}%
                     </td>
                     <td className="px-4 py-2 text-right" style={{ color: varAColor }}>
-                      {formatSOL(stageA.totalFee)}
+                      {formatCurrency(convert(stageA.totalFee), currency)}
                     </td>
                     <td className="px-4 py-2 text-right" style={{ color: varBColor }}>
                       {(stageB?.rate ?? 0).toFixed(2)}%
                     </td>
                     <td className="px-4 py-2 text-right" style={{ color: varBColor }}>
-                      {formatSOL(stageB?.totalFee ?? 0)}
+                      {formatCurrency(convert(stageB?.totalFee ?? 0), currency)}
                     </td>
                     <td
                       className="px-4 py-2 text-right font-semibold"
                       style={{ color: delta >= 0 ? COLORS.green : COLORS.red }}
                     >
                       {delta >= 0 ? "+" : ""}
-                      {formatSOL(delta)}
+                      {formatCurrency(convert(delta), currency)}
                     </td>
                   </tr>
                 );
@@ -833,13 +822,13 @@ function ABTestSection({
                   {simA.weightedAvgRate.toFixed(2)}%
                 </td>
                 <td className="px-4 py-2 text-right" style={{ color: varAColor }}>
-                  {formatSOL(simA.totalRevenue)}
+                  {formatCurrency(convert(simA.totalRevenue), currency)}
                 </td>
                 <td className="px-4 py-2 text-right" style={{ color: varBColor }}>
                   {simB.weightedAvgRate.toFixed(2)}%
                 </td>
                 <td className="px-4 py-2 text-right" style={{ color: varBColor }}>
-                  {formatSOL(simB.totalRevenue)}
+                  {formatCurrency(convert(simB.totalRevenue), currency)}
                 </td>
                 <td
                   className="px-4 py-2 text-right"
@@ -851,7 +840,7 @@ function ABTestSection({
                   }}
                 >
                   {simB.totalRevenue - simA.totalRevenue >= 0 ? "+" : ""}
-                  {formatSOL(simB.totalRevenue - simA.totalRevenue)}
+                  {formatCurrency(convert(simB.totalRevenue - simA.totalRevenue), currency)}
                 </td>
               </tr>
             </tbody>

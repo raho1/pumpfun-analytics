@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { Hero } from "@/components/hero";
 import { KPIRow } from "@/components/kpi-row";
 import { Footer } from "@/components/footer";
@@ -18,8 +18,8 @@ import { CompetitorsTab } from "@/components/tabs/competitors-tab";
 import { ProjectionsTab } from "@/components/tabs/projections-tab";
 import { DeepDivesTab } from "@/components/tabs/deep-dives-tab";
 import { useDuneQuery } from "@/hooks/use-dune-query";
-import { useSolPrice } from "@/hooks/use-sol-price";
-import { formatCompact, formatPercent } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
+import { formatCurrency, formatCompact, formatPercent } from "@/lib/utils";
 import type { DailyVolume, DailyLaunches, GraduationRate, FeeRevenue } from "@/lib/types";
 
 const TAB_GROUPS = [
@@ -54,84 +54,54 @@ const TAB_GROUPS = [
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("overview");
-  const tabListRef = useRef<HTMLDivElement>(null);
-  const [scrollState, setScrollState] = useState({ start: true, end: false });
-
-  const handleTabScroll = useCallback(() => {
-    const el = tabListRef.current;
-    if (!el) return;
-    setScrollState({
-      start: el.scrollLeft <= 4,
-      end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 4,
-    });
-  }, []);
-
-  useEffect(() => {
-    handleTabScroll();
-    const el = tabListRef.current;
-    el?.addEventListener("scroll", handleTabScroll, { passive: true });
-    return () => el?.removeEventListener("scroll", handleTabScroll);
-  }, [handleTabScroll]);
+  const { currency, convert, sol } = useCurrency();
 
   const { data: volume } = useDuneQuery<DailyVolume[]>("daily_volume");
   const { data: launches } = useDuneQuery<DailyLaunches[]>("daily_launches");
   const { data: gradRate } = useDuneQuery<GraduationRate[]>("graduation_rate");
   const { data: feeRevenue } = useDuneQuery<FeeRevenue[]>("fee_revenue");
-  const { sol } = useSolPrice();
 
   const kpis = useMemo(() => {
-    const avgLaunches = launches && launches.length > 0
-      ? formatCompact(launches.reduce((s, r) => s + r.launches, 0) / launches.length)
-      : "~30K";
+    // Helper: get the last complete day's value (skip today's partial = last element)
+    const latest = <T,>(arr: T[] | undefined, fn: (r: T) => number): { value: number; spark: number[] } => {
+      if (!arr || arr.length < 2) return { value: 0, spark: [] };
+      const idx = arr.length >= 2 ? arr.length - 2 : 0; // yesterday = last complete day
+      const spark = arr.slice(Math.max(0, arr.length - 8), arr.length - 1).map(fn);
+      return { value: fn(arr[idx]), spark };
+    };
 
-    const avgVol = volume && volume.length > 0
-      ? formatCompact(volume.reduce((s, r) => s + r.volume_sol, 0) / volume.length)
-      : "~1.1M";
-
-    const avgTraders = volume && volume.length > 0
-      ? formatCompact(volume.reduce((s, r) => s + r.unique_traders, 0) / volume.length)
-      : "~170K";
-
-    const avgGrad = gradRate && gradRate.length > 0
-      ? formatPercent(gradRate.reduce((s, r) => s + Number(r.grad_rate), 0) / gradRate.length)
-      : "~1%";
-
-    const avgFees = feeRevenue && feeRevenue.length > 0
-      ? formatCompact(feeRevenue.reduce((s, r) => s + r.total_fees, 0) / feeRevenue.length)
-      : "~13K";
+    const vol = latest(volume, (r) => r.volume_sol);
+    const lnch = latest(launches, (r) => r.launches);
+    const grad = latest(gradRate, (r) => Number(r.grad_rate));
+    const traders = latest(volume, (r) => r.unique_traders);
+    const fees = latest(feeRevenue, (r) => r.total_fees);
 
     return [
-      { value: avgLaunches, label: "Daily Launches" },
-      { value: avgVol, label: "Daily Volume (SOL)" },
-      { value: avgGrad, label: "Graduation Rate", accent: "#a78bfa" },
-      { value: avgTraders, label: "Daily Traders" },
-      { value: avgFees, label: "Daily Fees (SOL)" },
+      { value: lnch.value ? formatCompact(lnch.value) : "~30K", label: "Daily Launches", sparkData: lnch.spark },
+      { value: vol.value ? formatCurrency(convert(vol.value), currency) : "~1.1M", label: "Daily Volume", sparkData: vol.spark.map(v => convert(v)) },
+      { value: grad.value ? formatPercent(grad.value) : "~1%", label: "Graduation Rate", accent: "#a78bfa", sparkData: grad.spark },
+      { value: traders.value ? formatCompact(traders.value) : "~170K", label: "Daily Traders", sparkData: traders.spark },
+      { value: fees.value ? formatCurrency(convert(fees.value), currency) : "~13K", label: "Daily Fees", sparkData: fees.spark.map(v => convert(v)) },
       {
-        value: sol.price ? `$${sol.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "—",
+        value: sol.price ? `$${sol.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "\u2014",
         label: "SOL Price",
         accent: "#06b6d4",
         delta: sol.change_24h || undefined,
       },
     ];
-  }, [volume, launches, gradRate, feeRevenue, sol]);
+  }, [volume, launches, gradRate, feeRevenue, sol, currency, convert]);
 
   return (
     <main className="max-w-[1360px] mx-auto px-4 pb-8">
       <Hero />
       <KPIRow items={kpis} />
 
-      {/* Tabs */}
-      <div
-        className="tab-list-wrapper mb-5"
-        data-scroll-start={scrollState.start}
-        data-scroll-end={scrollState.end}
-      >
-        <div className="tab-list" ref={tabListRef}>
-          {TAB_GROUPS.map((group, gi) => (
-            <div key={group.label} className="flex items-center gap-0.5">
-              {gi > 0 && (
-                <div className="w-px h-5 bg-[rgba(255,255,255,0.06)] mx-1 flex-shrink-0" />
-              )}
+      {/* Tab bar — sticky with group labels */}
+      <div className="tab-bar">
+        {TAB_GROUPS.map((group) => (
+          <div key={group.label} className="tab-group">
+            <span className="tab-group-label">{group.label}</span>
+            <div className="tab-group-buttons">
               {group.tabs.map((tab) => (
                 <button
                   key={tab.key}
@@ -143,8 +113,8 @@ export default function Home() {
                 </button>
               ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
 
       {/* Tab content */}

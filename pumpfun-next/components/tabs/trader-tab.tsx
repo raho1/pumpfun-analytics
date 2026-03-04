@@ -6,12 +6,14 @@ import { SectionHeader } from "@/components/section-header";
 import { DataTable } from "@/components/charts/data-table";
 import { BarChartComponent } from "@/components/charts/bar-chart";
 import { COLORS } from "@/lib/colors";
-import { shortenAddress, formatCompact } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
+import { shortenAddress, formatCompact, formatCurrency } from "@/lib/utils";
 import type { TopTraderPnl, WhaleTracker } from "@/lib/types";
 
 export function TraderTab() {
   const { data: pnl, isLoading: l1 } = useDuneQuery<TopTraderPnl[]>("top_traders_pnl");
   const { data: whales, isLoading: l2 } = useDuneQuery<WhaleTracker[]>("whale_tracker");
+  const { currency, convert } = useCurrency();
 
   return (
     <div>
@@ -65,7 +67,7 @@ export function TraderTab() {
               yKey="pnl"
               isDate={false}
               colorByValue
-              yFormatter={(v) => formatCompact(v)}
+              yFormatter={(v) => formatCurrency(convert(v), currency)}
             />
           </ChartCard>
         </div>
