@@ -27,6 +27,10 @@ export function Hero() {
               style={{ boxShadow: "0 0 6px #22c55e", animation: "livePulse 2s infinite" }}
             />
             Live Analytics
+            <span className="text-[#33334a] mx-0.5">|</span>
+            <span className="text-[#44445a] normal-case tracking-normal">
+              Refreshes every 5 min
+            </span>
           </div>
 
           {/* Title */}
@@ -35,7 +39,7 @@ export function Hero() {
           </h1>
 
           {/* Subtitle */}
-          <p className="text-[0.85rem] text-[#55556a] max-w-[480px] leading-[1.6]">
+          <p className="text-[0.85rem] text-[var(--color-text-muted)] max-w-[480px] leading-[1.6]">
             On-chain intelligence for the largest memecoin launchpad on Solana.
           </p>
         </div>
@@ -52,7 +56,7 @@ export function Hero() {
                 className="text-[0.7rem] font-semibold font-mono"
                 style={{ color: sol.change_24h >= 0 ? "#22c55e" : "#ef4444" }}
               >
-                {sol.change_24h >= 0 ? "+" : ""}{sol.change_24h.toFixed(1)}%
+                {sol.change_24h >= 0 ? "\u2191" : "\u2193"} {Math.abs(sol.change_24h).toFixed(1)}%
               </span>
             )}
           </div>

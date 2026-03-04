@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { Hero } from "@/components/hero";
 import { KPIRow } from "@/components/kpi-row";
 import { Footer } from "@/components/footer";
@@ -16,27 +16,62 @@ import { FeeAnalyticsTab } from "@/components/tabs/fee-analytics-tab";
 import { PumpSwapTab } from "@/components/tabs/pumpswap-tab";
 import { CompetitorsTab } from "@/components/tabs/competitors-tab";
 import { ProjectionsTab } from "@/components/tabs/projections-tab";
+import { DeepDivesTab } from "@/components/tabs/deep-dives-tab";
 import { useDuneQuery } from "@/hooks/use-dune-query";
 import { useSolPrice } from "@/hooks/use-sol-price";
 import { formatCompact, formatPercent } from "@/lib/utils";
 import type { DailyVolume, DailyLaunches, GraduationRate, FeeRevenue } from "@/lib/types";
 
-const TABS = [
-  { key: "overview", label: "Core Activity" },
-  { key: "pumpswap", label: "PumpSwap" },
-  { key: "trading", label: "Trading" },
-  { key: "revenue", label: "Revenue" },
-  { key: "fee-lab", label: "Fee Lab" },
-  { key: "health", label: "Health" },
-  { key: "traders", label: "Traders" },
-  { key: "mev", label: "MEV" },
-  { key: "competitors", label: "Competitors" },
-  { key: "projections", label: "Projections" },
-  { key: "analysis", label: "Analysis" },
+const TAB_GROUPS = [
+  {
+    label: "Protocol",
+    tabs: [
+      { key: "overview", label: "Core Activity" },
+      { key: "pumpswap", label: "PumpSwap" },
+      { key: "revenue", label: "Revenue" },
+      { key: "health", label: "Health" },
+    ],
+  },
+  {
+    label: "Trading",
+    tabs: [
+      { key: "trading", label: "Trading" },
+      { key: "traders", label: "Traders" },
+      { key: "mev", label: "MEV" },
+      { key: "fee-lab", label: "Fee Lab" },
+    ],
+  },
+  {
+    label: "Strategy",
+    tabs: [
+      { key: "competitors", label: "Competitors" },
+      { key: "projections", label: "Projections" },
+      { key: "deep-dives", label: "Deep Dives" },
+      { key: "analysis", label: "Analysis" },
+    ],
+  },
 ];
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("overview");
+  const tabListRef = useRef<HTMLDivElement>(null);
+  const [scrollState, setScrollState] = useState({ start: true, end: false });
+
+  const handleTabScroll = useCallback(() => {
+    const el = tabListRef.current;
+    if (!el) return;
+    setScrollState({
+      start: el.scrollLeft <= 4,
+      end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 4,
+    });
+  }, []);
+
+  useEffect(() => {
+    handleTabScroll();
+    const el = tabListRef.current;
+    el?.addEventListener("scroll", handleTabScroll, { passive: true });
+    return () => el?.removeEventListener("scroll", handleTabScroll);
+  }, [handleTabScroll]);
 
   const { data: volume } = useDuneQuery<DailyVolume[]>("daily_volume");
   const { data: launches } = useDuneQuery<DailyLaunches[]>("daily_launches");
@@ -86,21 +121,34 @@ export default function Home() {
       <KPIRow items={kpis} />
 
       {/* Tabs */}
-      <div className="tab-list mb-5">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            className="tab-trigger"
-            data-active={activeTab === tab.key}
-            onClick={() => setActiveTab(tab.key)}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div
+        className="tab-list-wrapper mb-5"
+        data-scroll-start={scrollState.start}
+        data-scroll-end={scrollState.end}
+      >
+        <div className="tab-list" ref={tabListRef}>
+          {TAB_GROUPS.map((group, gi) => (
+            <div key={group.label} className="flex items-center gap-0.5">
+              {gi > 0 && (
+                <div className="w-px h-5 bg-[rgba(255,255,255,0.06)] mx-1 flex-shrink-0" />
+              )}
+              {group.tabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  className="tab-trigger"
+                  data-active={activeTab === tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Tab content */}
-      <div>
+      <div key={activeTab} className="animate-fade-in">
         {activeTab === "overview" && <OverviewTab />}
         {activeTab === "pumpswap" && <PumpSwapTab />}
         {activeTab === "trading" && <TradingTab />}
@@ -111,6 +159,7 @@ export default function Home() {
         {activeTab === "mev" && <MEVTab />}
         {activeTab === "competitors" && <CompetitorsTab />}
         {activeTab === "projections" && <ProjectionsTab />}
+        {activeTab === "deep-dives" && <DeepDivesTab />}
         {activeTab === "analysis" && <AnalysisTab />}
       </div>
 

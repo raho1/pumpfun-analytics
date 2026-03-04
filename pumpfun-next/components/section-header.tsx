@@ -55,7 +55,7 @@ export function SectionHeader({ title, description, methodology, sourceLabel, so
           </a>
         )}
       </div>
-      <p className="text-[0.8rem] text-[#55556a] leading-[1.5] max-w-[720px]">{description}</p>
+      <p className="text-[0.8rem] text-[var(--color-text-muted)] leading-[1.6] max-w-[720px]">{description}</p>
       {methodology && showMethodology && (
         <div
           className="mt-2.5 px-3.5 py-3 rounded-lg text-[0.75rem] leading-[1.6] max-w-[720px]"

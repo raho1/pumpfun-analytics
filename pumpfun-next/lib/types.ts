@@ -207,6 +207,41 @@ export interface CompetitorGradRates {
   grad_rate_pct: number | string;
 }
 
+export interface CohortRetention {
+  cohort_week: string;
+  week_offset: number;
+  active_users: number;
+  cohort_size: number;
+  retention_pct: number;
+}
+
+export interface RevenueQuality {
+  day: string;
+  total_fees: number;
+  total_traders: number;
+  arpu_sol: number;
+  top10_concentration_pct: number;
+  mature_revenue_pct: number;
+}
+
+export interface PostGradSurvival {
+  grad_week: string;
+  total_graduated: number;
+  survival_1h: number;
+  survival_6h: number;
+  survival_24h: number;
+  survival_48h: number;
+  survival_7d: number;
+}
+
+export interface CurveVelocity {
+  time_bucket: string;
+  bucket_order: number;
+  token_count: number;
+  avg_trades: number;
+  median_minutes: number;
+}
+
 export interface SolPrice {
   price: number;
   change_24h: number;

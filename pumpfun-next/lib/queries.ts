@@ -31,6 +31,11 @@ export const QUERY_IDS: Record<string, number> = {
   competitor_dex_share: 6773666,
   competitor_launches: 6773667,
   competitor_grad_rates: 6773669,
+  // Deep Dives
+  cohort_retention: 6774041,
+  revenue_quality: 6774054,
+  post_grad_survival: 6774063,
+  curve_velocity: 6774071,
 };
 
 export const PARAMETERIZED = new Set([
@@ -80,4 +85,8 @@ export const QUERY_DESCRIPTIONS: Record<string, string> = {
   competitor_dex_share: "DEX volume market share across Solana (30d)",
   competitor_launches: "Token launches by launchpad platform (30d)",
   competitor_grad_rates: "Graduation rates by launchpad platform (30d)",
+  cohort_retention: "Weekly wallet cohort retention analysis (8-week window)",
+  revenue_quality: "Revenue quality: ARPU, concentration, durability",
+  post_grad_survival: "Post-graduation token survival curve",
+  curve_velocity: "Bonding curve velocity (time-to-graduate distribution)",
 };

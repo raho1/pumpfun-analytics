@@ -27,7 +27,7 @@ html {
 body {
   background: var(--color-bg);
   color: var(--color-text);
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -49,8 +49,8 @@ body {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  padding: 16px 14px;
-  text-align: center;
+  padding: 20px 18px;
+  text-align: left;
   position: relative;
   overflow: hidden;
   transition: all 0.25s ease;
@@ -87,6 +87,35 @@ body {
 }
 
 /* ── Tab bar ────────────────────────── */
+.tab-list-wrapper {
+  position: relative;
+}
+.tab-list-wrapper::before,
+.tab-list-wrapper::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40px;
+  pointer-events: none;
+  z-index: 2;
+  transition: opacity 0.2s;
+}
+.tab-list-wrapper::before {
+  left: 0;
+  background: linear-gradient(to right, var(--color-surface), transparent);
+  border-radius: 10px 0 0 10px;
+  opacity: 1;
+}
+.tab-list-wrapper::after {
+  right: 0;
+  background: linear-gradient(to left, var(--color-surface), transparent);
+  border-radius: 0 10px 10px 0;
+  opacity: 1;
+}
+.tab-list-wrapper[data-scroll-start="true"]::before { opacity: 0; }
+.tab-list-wrapper[data-scroll-end="true"]::after { opacity: 0; }
+
 .tab-list {
   display: flex;
   gap: 2px;
@@ -106,7 +135,7 @@ body {
   border: none;
   border-radius: 7px;
   color: var(--color-text-dim);
-  padding: 8px 16px;
+  padding: 8px 14px;
   font-weight: 500;
   font-size: 0.8rem;
   cursor: pointer;
@@ -119,9 +148,10 @@ body {
   background: rgba(255, 255, 255, 0.03);
 }
 .tab-trigger[data-active="true"] {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(124, 58, 237, 0.08);
   color: var(--color-text);
   font-weight: 600;
+  box-shadow: inset 0 -2px 0 0 var(--color-purple);
 }
 
 /* ── Animations ─────────────────────── */
