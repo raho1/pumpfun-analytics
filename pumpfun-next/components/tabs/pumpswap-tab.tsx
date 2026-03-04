@@ -69,8 +69,8 @@ export function PumpSwapTab() {
       <SectionHeader
         title="PumpSwap AMM"
         description="PumpSwap is Pump.fun's native AMM for graduated tokens. Tokens that complete the bonding curve automatically migrate to PumpSwap pools with a 3-way fee split: LP providers, protocol, and coin creators."
-        methodology="Volume and fees derived from pump_amm_evt_buyevent and pump_amm_evt_sellevent decoded tables. All uint256 values divided by 1e9 (lamports → SOL). Fee splits calculated from lp_fee, protocol_fee, and coin_creator_fee fields."
-        sourceLabel="Dune: pumpdotfun_solana"
+        methodology="Volume sourced from dex_solana.trades spellbook (project = pumpdotfun), cross-validated against DeFiLlama. Fee splits computed from known PumpSwap basis points: 25 bps LP, 5 bps protocol. SOL conversion via daily prices.usd average."
+        sourceLabel="Dune: dex_solana.trades"
       />
 
       {/* KPIs */}
@@ -103,7 +103,7 @@ export function PumpSwapTab() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <ChartCard
           title="PumpSwap Daily Volume"
-          note="Sum of quote_amount_in (buys) + base_amount_in (sells) / 1e9"
+          note="Volume from dex_solana.trades spellbook, converted to SOL via daily price"
           isLoading={l1}
         >
           {fees && fees.length > 0 && (
@@ -259,9 +259,9 @@ export function PumpSwapTab() {
             <DataTable
               data={topPools}
               columns={[
-                { key: "pool", label: "Pool", format: "address" },
-                { key: "volume_sol", label: "Volume (SOL)", format: "sol", align: "right" },
-                { key: "total_fees", label: "Fees (SOL)", format: "sol", align: "right" },
+                { key: "pool", label: "Pool" },
+                { key: "volume_sol", label: "Volume", format: "sol", align: "right" },
+                { key: "total_fees", label: "Fees", format: "sol", align: "right" },
                 { key: "trades", label: "Trades", format: "number", align: "right" },
                 { key: "unique_traders", label: "Traders", format: "number", align: "right" },
               ]}
