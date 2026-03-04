@@ -4,6 +4,15 @@ import { SectionHeader } from "@/components/section-header";
 
 const SECTIONS = [
   {
+    tag: "PumpSwap AMM",
+    title: "The DEX That Changed Everything",
+    paragraphs: [
+      "PumpSwap launched as Pump.fun's native AMM, replacing Raydium as the graduation destination for bonding curve tokens. Every token that graduates now automatically migrates to a PumpSwap pool with a 3-way fee split: LP providers, protocol, and coin creators.",
+      "The migration rate is 100% — every graduated token flows to PumpSwap. This vertical integration captures post-graduation trading fees that previously leaked to Raydium. Combined with the sliding creator fee from Project Ascend, PumpSwap creates a continuous revenue stream from token creation through post-graduation trading.",
+      "The liquidity model is key: PumpSwap pools start with the SOL from the bonding curve as initial liquidity. LP providers can deposit additional liquidity to earn fees. This creates a natural bootstrap mechanism that competitors lack — no cold-start liquidity problem.",
+    ],
+  },
+  {
     tag: "The Super-App Pivot",
     title: "Beyond Memecoins",
     paragraphs: [
