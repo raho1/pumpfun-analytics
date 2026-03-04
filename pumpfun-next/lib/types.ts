@@ -123,6 +123,69 @@ export interface FeeCurveGranular {
   avg_creator_fee_pct: number;
 }
 
+export interface PumpSwapVolume {
+  day: string;
+  buy_vol_sol: number;
+  buy_lp_fees: number;
+  buy_protocol_fees: number;
+  buy_creator_fees: number;
+  buy_trades: number;
+  buy_traders: number;
+}
+
+export interface PumpSwapFees {
+  day: string;
+  volume_sol: number;
+  lp_fees: number;
+  protocol_fees: number;
+  creator_fees: number;
+  total_fees: number;
+  trades: number;
+  active_pools: number;
+}
+
+export interface MigrationFunnel {
+  day: string;
+  created: number;
+  graduated: number;
+  migrated_to_pumpswap: number;
+  migration_sol: number;
+  migration_fees: number;
+  grad_rate: number | string;
+  migration_rate: number | string;
+}
+
+export interface PumpSwapTopPool {
+  pool: string;
+  volume_sol: number;
+  total_fees: number;
+  trades: number;
+  unique_traders: number;
+}
+
+export interface PumpSwapLiquidity {
+  day: string;
+  new_pools: number;
+  deposits: number;
+  sol_deposited: number;
+  depositors: number;
+  withdrawals: number;
+  sol_withdrawn: number;
+  withdrawers: number;
+  net_liquidity_sol: number;
+}
+
+export interface MEVBotStrategy {
+  bot: string;
+  trades: number;
+  volume_usd: number;
+  active_days: number;
+  avg_trade_usd: number;
+  unique_tokens: number;
+  sell_pct: number;
+  strategy: string;
+}
+
 export interface SolPrice {
   price: number;
   change_24h: number;

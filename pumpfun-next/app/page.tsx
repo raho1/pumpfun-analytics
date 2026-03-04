@@ -13,6 +13,7 @@ import { ProtocolHealthTab } from "@/components/tabs/protocol-health-tab";
 import { TraderTab } from "@/components/tabs/trader-tab";
 import { MEVTab } from "@/components/tabs/mev-tab";
 import { FeeAnalyticsTab } from "@/components/tabs/fee-analytics-tab";
+import { PumpSwapTab } from "@/components/tabs/pumpswap-tab";
 import { useDuneQuery } from "@/hooks/use-dune-query";
 import { useSolPrice } from "@/hooks/use-sol-price";
 import { formatCompact, formatPercent } from "@/lib/utils";
@@ -20,6 +21,7 @@ import type { DailyVolume, DailyLaunches, GraduationRate, FeeRevenue } from "@/l
 
 const TABS = [
   { key: "overview", label: "Core Activity" },
+  { key: "pumpswap", label: "PumpSwap" },
   { key: "trading", label: "Trading" },
   { key: "revenue", label: "Revenue" },
   { key: "fee-lab", label: "Fee Lab" },
@@ -96,6 +98,7 @@ export default function Home() {
       {/* Tab content */}
       <div>
         {activeTab === "overview" && <OverviewTab />}
+        {activeTab === "pumpswap" && <PumpSwapTab />}
         {activeTab === "trading" && <TradingTab />}
         {activeTab === "revenue" && <RevenueTab />}
         {activeTab === "fee-lab" && <FeeOptimizationLab />}

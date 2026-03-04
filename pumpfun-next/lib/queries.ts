@@ -22,6 +22,12 @@ export const QUERY_IDS: Record<string, number> = {
   sandwich_profit: 6773359,
   smart_money: 6773360,
   mev_impact_rate: 6773363,
+  pumpswap_volume: 6773615,
+  pumpswap_fees: 6773617,
+  migration_funnel: 6773618,
+  pumpswap_top_pools: 6773619,
+  pumpswap_liquidity: 6773620,
+  mev_bot_strategy: 6773622,
 };
 
 export const PARAMETERIZED = new Set([
@@ -32,6 +38,10 @@ export const PARAMETERIZED = new Set([
   "bot_activity",
   "price_impact",
   "new_vs_returning",
+  "pumpswap_volume",
+  "pumpswap_fees",
+  "migration_funnel",
+  "pumpswap_liquidity",
 ]);
 
 export const QUERY_DESCRIPTIONS: Record<string, string> = {
@@ -58,4 +68,10 @@ export const QUERY_DESCRIPTIONS: Record<string, string> = {
   sandwich_profit: "Sandwich attack profitability",
   smart_money: "Smart money wallet tracking",
   mev_impact_rate: "MEV impact rate on trades",
+  pumpswap_volume: "PumpSwap AMM daily volume & traders",
+  pumpswap_fees: "PumpSwap 3-way fee split analysis",
+  migration_funnel: "Token lifecycle funnel: create → graduate → migrate",
+  pumpswap_top_pools: "Top PumpSwap pools by volume (7d)",
+  pumpswap_liquidity: "PumpSwap liquidity depth over time",
+  mev_bot_strategy: "MEV bot strategy classification",
 };

@@ -6,13 +6,16 @@ import { ChartCard } from "@/components/chart-card";
 import { SectionHeader } from "@/components/section-header";
 import { BarChartComponent } from "@/components/charts/bar-chart";
 import { AreaChartComponent } from "@/components/charts/area-chart";
-import { COLORS } from "@/lib/colors";
+import { DonutChartComponent } from "@/components/charts/donut-chart";
+import { DataTable } from "@/components/charts/data-table";
+import { COLORS, CHART_COLORS } from "@/lib/colors";
 import { formatCompact } from "@/lib/utils";
-import type { SandwichDetection, BotActivity } from "@/lib/types";
+import type { SandwichDetection, BotActivity, MEVBotStrategy } from "@/lib/types";
 
 export function MEVTab() {
   const { data: sandwich, isLoading: l1 } = useDuneQuery<SandwichDetection[]>("sandwich_detection");
   const { data: bots, isLoading: l2 } = useDuneQuery<BotActivity[]>("bot_activity");
+  const { data: botStrategies, isLoading: l3 } = useDuneQuery<MEVBotStrategy[]>("mev_bot_strategy");
 
   const topBots = useMemo(() => {
     if (!bots || bots.length === 0) return [];
@@ -26,6 +29,16 @@ export function MEVTab() {
       .sort((a, b) => b.vol - a.vol)
       .slice(0, 8);
   }, [bots]);
+
+  const strategyBreakdown = useMemo(() => {
+    if (!botStrategies || botStrategies.length === 0) return [];
+    const agg: Record<string, number> = {};
+    for (const b of botStrategies) {
+      const s = b.strategy || "Other";
+      agg[s] = (agg[s] || 0) + Number(b.volume_usd || 0);
+    }
+    return Object.entries(agg).map(([name, value]) => ({ name, value }));
+  }, [botStrategies]);
 
   const sandwichTotals = useMemo(() => {
     if (!sandwich || sandwich.length === 0) return null;
@@ -99,6 +112,41 @@ export function MEVTab() {
           />
         )}
       </ChartCard>
+
+      {/* Bot Strategy Classification */}
+      <div className="mt-6">
+        <SectionHeader
+          title="Bot Strategy Classification"
+          description="Bots classified by trading behavior: Sandwich/HFT (high frequency, many tokens), Snipers (mostly buys), Arbitrage (balanced buy/sell), Whale/Copy-Trade (large positions, few tokens)."
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <ChartCard title="Volume by Bot Strategy" isLoading={l3}>
+            {strategyBreakdown.length > 0 && (
+              <DonutChartComponent
+                data={strategyBreakdown}
+                colors={CHART_COLORS}
+                valueFormatter={(v) => `$${formatCompact(v)}`}
+              />
+            )}
+          </ChartCard>
+
+          <ChartCard title="Bot Strategy Detail" isLoading={l3}>
+            {botStrategies && botStrategies.length > 0 && (
+              <DataTable
+                data={botStrategies.slice(0, 15)}
+                columns={[
+                  { key: "bot", label: "Bot", format: "address" },
+                  { key: "strategy", label: "Strategy" },
+                  { key: "volume_usd", label: "Volume (USD)", format: "usd", align: "right" },
+                  { key: "trades", label: "Trades", format: "number", align: "right" },
+                  { key: "unique_tokens", label: "Tokens", format: "number", align: "right" },
+                ]}
+              />
+            )}
+          </ChartCard>
+        </div>
+      </div>
     </div>
   );
 }
