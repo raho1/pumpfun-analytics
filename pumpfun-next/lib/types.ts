@@ -170,9 +170,7 @@ export interface PumpSwapLiquidity {
   sol_deposited: number;
   depositors: number;
   withdrawals: number;
-  sol_withdrawn: number;
   withdrawers: number;
-  net_liquidity_sol: number;
 }
 
 export interface MEVBotStrategy {
@@ -184,6 +182,29 @@ export interface MEVBotStrategy {
   unique_tokens: number;
   sell_pct: number;
   strategy: string;
+}
+
+export interface CompetitorDexShare {
+  day: string;
+  dex: string;
+  volume_usd: number;
+  trades: number;
+  traders: number;
+  market_share_pct: number;
+}
+
+export interface CompetitorLaunches {
+  day: string;
+  platform: string;
+  launches: number;
+}
+
+export interface CompetitorGradRates {
+  day: string;
+  platform: string;
+  created: number;
+  graduated: number;
+  grad_rate_pct: number | string;
 }
 
 export interface SolPrice {

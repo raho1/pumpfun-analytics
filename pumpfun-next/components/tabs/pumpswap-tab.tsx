@@ -67,6 +67,8 @@ export function PumpSwapTab() {
       <SectionHeader
         title="PumpSwap AMM"
         description="PumpSwap is Pump.fun's native AMM for graduated tokens. Tokens that complete the bonding curve automatically migrate to PumpSwap pools with a 3-way fee split: LP providers, protocol, and coin creators."
+        methodology="Volume and fees derived from pump_amm_evt_buyevent and pump_amm_evt_sellevent decoded tables. All uint256 values divided by 1e9 (lamports → SOL). Fee splits calculated from lp_fee, protocol_fee, and coin_creator_fee fields."
+        sourceLabel="Dune: pumpdotfun_solana"
       />
 
       {/* KPIs */}
@@ -97,7 +99,11 @@ export function PumpSwapTab() {
 
       {/* Volume & Fee Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <ChartCard title="PumpSwap Daily Volume" isLoading={l1}>
+        <ChartCard
+          title="PumpSwap Daily Volume"
+          note="Sum of quote_amount_in (buys) + base_amount_in (sells) / 1e9"
+          isLoading={l1}
+        >
           {fees && fees.length > 0 && (
             <AreaChartComponent
               data={fees}
@@ -109,7 +115,11 @@ export function PumpSwapTab() {
           )}
         </ChartCard>
 
-        <ChartCard title="Fee Revenue Breakdown" isLoading={l1}>
+        <ChartCard
+          title="Fee Revenue Breakdown"
+          note="3-way split: LP providers, protocol, and coin creators"
+          isLoading={l1}
+        >
           {fees && fees.length > 0 && (
             <StackedBarChartComponent
               data={fees}
@@ -129,7 +139,8 @@ export function PumpSwapTab() {
       <div className="mt-6">
         <SectionHeader
           title="Token Lifecycle Funnel"
-          description="Created → Graduated → Migrated to PumpSwap. Track the full lifecycle of pump.fun tokens."
+          description="Created → Graduated → Migrated to PumpSwap. Track the full lifecycle of pump.fun tokens from bonding curve creation through graduation and AMM migration."
+          methodology="Created = pump_evt_createevent count. Graduated = pump_evt_completeevent count. Migrated = pump_evt_completepumpammmigrationevent count. Graduation rate = graduated / created. Migration rate = migrated / graduated."
         />
 
         {migrationKpis && (
@@ -193,16 +204,22 @@ export function PumpSwapTab() {
       <div className="mt-6">
         <SectionHeader
           title="Liquidity Activity"
-          description="LP deposits, withdrawals, and net liquidity flow."
+          description="LP deposit activity and new pool creation on PumpSwap."
+          methodology="Deposits tracked via pump_amm_evt_depositevent (quote_amount_in / 1e9 = SOL). Pool creation from pump_amm_evt_createpoolevent. Withdrawal counts from pump_amm_evt_withdrawevent."
+          sourceLabel="Dune: pumpdotfun_solana"
         />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <ChartCard title="Net Liquidity Flow (SOL)" isLoading={l4}>
+          <ChartCard
+            title="SOL Deposited by LPs"
+            subtitle="Daily LP deposits into PumpSwap pools"
+            isLoading={l4}
+          >
             {liquidity && liquidity.length > 0 && (
               <BarChartComponent
                 data={liquidity}
                 xKey="day"
-                yKey="net_liquidity_sol"
+                yKey="sol_deposited"
                 color={COLORS.green}
                 gradient
                 yFormatter={(v) => `${formatCompact(v)} SOL`}
@@ -210,7 +227,11 @@ export function PumpSwapTab() {
             )}
           </ChartCard>
 
-          <ChartCard title="New Pools Created" isLoading={l4}>
+          <ChartCard
+            title="New Pools Created"
+            subtitle="Graduated tokens auto-migrate to new PumpSwap pools"
+            isLoading={l4}
+          >
             {liquidity && liquidity.length > 0 && (
               <BarChartComponent
                 data={liquidity}
@@ -227,7 +248,11 @@ export function PumpSwapTab() {
 
       {/* Top Pools Table */}
       <div className="mt-6">
-        <ChartCard title="Top PumpSwap Pools (7d)" isLoading={l3}>
+        <ChartCard
+          title="Top PumpSwap Pools (7d)"
+          note="Ranked by trading volume over the last 7 days"
+          isLoading={l3}
+        >
           {topPools && topPools.length > 0 && (
             <DataTable
               data={topPools}

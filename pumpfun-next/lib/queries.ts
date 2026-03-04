@@ -28,6 +28,9 @@ export const QUERY_IDS: Record<string, number> = {
   pumpswap_top_pools: 6773619,
   pumpswap_liquidity: 6773620,
   mev_bot_strategy: 6773622,
+  competitor_dex_share: 6773666,
+  competitor_launches: 6773667,
+  competitor_grad_rates: 6773669,
 };
 
 export const PARAMETERIZED = new Set([
@@ -74,4 +77,7 @@ export const QUERY_DESCRIPTIONS: Record<string, string> = {
   pumpswap_top_pools: "Top PumpSwap pools by volume (7d)",
   pumpswap_liquidity: "PumpSwap liquidity depth over time",
   mev_bot_strategy: "MEV bot strategy classification",
+  competitor_dex_share: "DEX volume market share across Solana (30d)",
+  competitor_launches: "Token launches by launchpad platform (30d)",
+  competitor_grad_rates: "Graduation rates by launchpad platform (30d)",
 };

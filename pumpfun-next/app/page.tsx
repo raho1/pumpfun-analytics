@@ -14,6 +14,8 @@ import { TraderTab } from "@/components/tabs/trader-tab";
 import { MEVTab } from "@/components/tabs/mev-tab";
 import { FeeAnalyticsTab } from "@/components/tabs/fee-analytics-tab";
 import { PumpSwapTab } from "@/components/tabs/pumpswap-tab";
+import { CompetitorsTab } from "@/components/tabs/competitors-tab";
+import { ProjectionsTab } from "@/components/tabs/projections-tab";
 import { useDuneQuery } from "@/hooks/use-dune-query";
 import { useSolPrice } from "@/hooks/use-sol-price";
 import { formatCompact, formatPercent } from "@/lib/utils";
@@ -28,6 +30,8 @@ const TABS = [
   { key: "health", label: "Health" },
   { key: "traders", label: "Traders" },
   { key: "mev", label: "MEV" },
+  { key: "competitors", label: "Competitors" },
+  { key: "projections", label: "Projections" },
   { key: "analysis", label: "Analysis" },
 ];
 
@@ -105,6 +109,8 @@ export default function Home() {
         {activeTab === "health" && <ProtocolHealthTab />}
         {activeTab === "traders" && <TraderTab />}
         {activeTab === "mev" && <MEVTab />}
+        {activeTab === "competitors" && <CompetitorsTab />}
+        {activeTab === "projections" && <ProjectionsTab />}
         {activeTab === "analysis" && <AnalysisTab />}
       </div>
 

@@ -34,3 +34,13 @@ export function shortenAddress(addr: string): string {
 export function cn(...classes: (string | undefined | false | null)[]): string {
   return classes.filter(Boolean).join(" ");
 }
+
+/**
+ * Sanity-check a numeric value against a reasonable ceiling.
+ * Catches broken uint256 conversions (e.g. missing /1e9 on lamports).
+ * Returns 0 for values above the ceiling — they'd distort charts.
+ */
+export function sanitizeValue(val: number, ceiling = 1e12): number {
+  if (!isFinite(val) || val > ceiling || val < -ceiling) return 0;
+  return val;
+}

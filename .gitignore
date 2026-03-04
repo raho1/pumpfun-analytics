@@ -30,3 +30,11 @@ Thumbs.db
 
 # Static dashboard (old version)
 dashboard/
+
+# Next.js
+node_modules/
+.next/
+.env.local
+.env*.local
+out/
+tsconfig.tsbuildinfo
