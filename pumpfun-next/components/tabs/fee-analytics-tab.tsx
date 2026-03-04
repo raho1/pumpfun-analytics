@@ -9,10 +9,9 @@ import { StackedBarChartComponent } from "@/components/charts/stacked-bar-chart"
 import { BarChartComponent } from "@/components/charts/bar-chart";
 import { COLORS, STAGE_COLORS } from "@/lib/colors";
 import { formatCompact } from "@/lib/utils";
-import type { FeeByCurveStage, FeeVsSurvival, FeeCurveGranular } from "@/lib/types";
+import type { FeeVsSurvival, FeeCurveGranular } from "@/lib/types";
 
 export function FeeAnalyticsTab() {
-  const { data: feeStage, isLoading: l1 } = useDuneQuery<FeeByCurveStage[]>("fee_by_curve_stage");
   const { data: feeVsSurv, isLoading: l2 } = useDuneQuery<FeeVsSurvival[]>("fee_vs_survival");
   const { data: feeCurve, isLoading: l3 } = useDuneQuery<FeeCurveGranular[]>("fee_curve_granular");
 

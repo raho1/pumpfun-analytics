@@ -103,6 +103,7 @@ export function DeepDivesTab() {
       { stage: "6 hours", pct: latest.survival_6h },
       { stage: "24 hours", pct: latest.survival_24h },
       { stage: "48 hours", pct: latest.survival_48h },
+      { stage: "7 days", pct: latest.survival_7d },
     ];
   }, [survivalChart]);
 
@@ -334,6 +335,7 @@ export function DeepDivesTab() {
                   { key: "survival_6h", name: "6hr", color: COLORS.cyan },
                   { key: "survival_24h", name: "24hr", color: COLORS.yellow },
                   { key: "survival_48h", name: "48hr", color: COLORS.orange },
+                  { key: "survival_7d", name: "7d", color: COLORS.red },
                 ]}
                 yFormatter={(v) => `${v.toFixed(0)}%`}
               />
@@ -345,20 +347,20 @@ export function DeepDivesTab() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 mb-6">
             <div className="insight-card">
               <div className="text-[0.65rem] font-semibold tracking-[1px] uppercase text-[#7c3aed] mb-1.5">
-                The 48-Hour Cliff
+                The 7-Day Cliff
               </div>
               <p className="text-[0.78rem] text-[#6b6b88] leading-[1.55]">
-                About <strong className="text-[#a78bfa]">50%</strong> of graduated tokens lose all trading activity within 48 hours.
-                This is the critical window for post-graduation liquidity.
+                Graduated tokens maintain <strong className="text-[#a78bfa]">95%+</strong> trading activity at 48 hours,
+                but <strong className="text-[#a78bfa]">~20-25%</strong> go silent by day 7 — the true liquidity cliff.
               </p>
             </div>
             <div className="insight-card">
               <div className="text-[0.65rem] font-semibold tracking-[1px] uppercase text-[#7c3aed] mb-1.5">
-                Strong Early Signal
+                Near-Perfect Migration
               </div>
               <p className="text-[0.78rem] text-[#6b6b88] leading-[1.55]">
-                <strong className="text-[#a78bfa]">85%+</strong> of graduated tokens show trading activity within 1 hour,
-                indicating healthy initial migration.
+                <strong className="text-[#a78bfa]">99%+</strong> of graduated tokens show DEX activity within 1 hour,
+                confirming PumpSwap auto-migration works as designed.
               </p>
             </div>
             <div className="insight-card">
@@ -366,8 +368,8 @@ export function DeepDivesTab() {
                 Product Implication
               </div>
               <p className="text-[0.78rem] text-[#6b6b88] leading-[1.55]">
-                Improving 24h→48h retention from <strong className="text-[#a78bfa]">~62%→~50%</strong> is the highest-leverage
-                intervention for PumpSwap pool longevity.
+                The <strong className="text-[#a78bfa]">48h→7d</strong> window is where liquidity dies.
+                Incentivizing LP retention beyond 48 hours is the highest-leverage intervention.
               </p>
             </div>
           </div>

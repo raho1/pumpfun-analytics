@@ -70,16 +70,20 @@ export interface NewVsReturning {
 export interface TopTraderPnl {
   trader: string;
   pnl: number;
-  buys: number;
-  sells: number;
-  volume_sol: number;
+  roi: number;
+  spent: number;
+  received: number;
+  tokens: number;
+  trades: number;
 }
 
 export interface WhaleTracker {
   trader: string;
-  volume_sol: number;
+  volume: number;
+  pnl: number;
+  tokens: number;
   trades: number;
-  tokens_traded: number;
+  buy_pct: number;
 }
 
 export interface SandwichDetection {
